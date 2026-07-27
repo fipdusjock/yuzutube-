@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ytdlp{% endblock %}</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="top">
+    <button class="menu-btn" onclick="toggleSidebar()">&#9776;</button>
+    <a class="logo" href="{{ url_for('index') }}">
+      <span class="play">&#9654;</span>ytdlp
+    </a>
+    <form class="search" action="{{ url_for('results') }}" method="get">
+      <input type="text" name="q" placeholder="検索" value="{{ query|default('') }}">
+      <button type="submit">&#128269;</button>
+    </form>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <a class="item active" href="{{ url_for('index') }}">
+        <span class="icon">&#8962;</span>ホーム
+      </a>
+      <hr>
+      <div class="hint">
+        このフロントエンドには「おすすめフィード」はありません。
+        検索するか、動画URL/IDを直接入力してください。
+      </div>
+    </nav>
+
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
