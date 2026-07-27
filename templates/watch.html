@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}{{ info.title }}{% endblock %}
+{% block content %}
+<div class="watch-layout">
+  <div>
+    <div class="player-wrap">
+      {% if playable_url or hls_url %}
+        <video id="player" controls playsinline poster="{{ info.thumbnail }}"></video>
+      {% else %}
+        <div class="player-fallback">
+          再生可能なフォーマットが見つかりませんでした。<br>
+          (映像+音声が一体になったフォーマットが無い動画の可能性があります)
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="video-title">{{ info.title }}</div>
+
+    <div class="video-owner-row">
+      <div class="video-owner">
+        <div class="avatar">{{ (info.channel or info.uploader or "?")[:1] }}</div>
+        <div>
+          <div class="name">
+            {% if info.channel_id %}
+              <a href="{{ url_for('channel', channel_id=info.channel_id) }}">{{ info.channel or info.uploader }}</a>
+            {% else %}
+              {{ info.channel or info.uploader }}
+            {% endif %}
+          </div>
+          {% if info.channel_follower_count %}
+          <div class="subs">{{ info.channel_follower_count|views|replace(" 回視聴", " 人") }}登録者</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        {% if info.view_count %}
+        <span class="stat-pill">&#128065; {{ info.view_count|views }}</span>
+        {% endif %}
+        {% if info.like_count %}
+        <span class="stat-pill">&#128077; {{ "{:,}".format(info.like_count) }}</span>
+        {% endif %}
+        {% if info.comment_count %}
+        <span class="stat-pill">&#128172; {{ "{:,}".format(info.comment_count) }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="description-box">
+      <div class="top-line">
+        {% if info.upload_date %}{{ info.upload_date|uploaddate }}{% endif %}
+        {% if info.tags %} &middot; {{ info.tags[:8]|join(", ") }}{% endif %}
+      </div>
+      {{ info.description or "(説明文なし)" }}
+
+      {% if info.chapters %}
+      <div class="chapters">
+        <div style="font-weight:600; margin-bottom:6px;">チャプター</div>
+        {% for c in info.chapters %}
+        <div class="chapter-row">
+          <span class="ts">{{ c.start_time|int|duration }}</span>
+          <span>{{ c.title }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="comments-section">
+      <div class="section-title">コメント {% if comments %}({{ comments|length }}){% endif %}</div>
+      {% if comments %}
+        {% for c in comments %}
+        <div class="comment-row">
+          <div class="avatar">{{ (c.author or "?")[:1] }}</div>
+          <div style="flex:1;">
+            <div>
+              <span class="author">{{ c.author }}</span>
+              <span class="time">{{ c.time_text }}</span>
+            </div>
+            <div class="text">{{ c.text }}</div>
+            {% if c.like_count %}<div class="likes">&#128077; {{ c.like_count }}</div>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">コメントはありません(またはコメント欄が無効になっています)</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    <div class="related-list">
+      {% for r in related %}
+      <a class="related-card" href="{{ url_for('watch', v=r.video_id) }}">
+        <div class="thumb-wrap">
+          {% if r.thumbnail %}<img src="{{ r.thumbnail }}" loading="lazy" alt="">{% endif %}
+          {% if r.length_text %}<span class="duration">{{ r.length_text }}</span>{% endif %}
+        </div>
+        <div>
+          <div class="title">{{ r.title }}</div>
+          <div class="sub">
+            {{ r.channel }}{% if r.view_count_text %}<br>{{ r.view_count_text }}{% endif %}
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if hls_url and not playable_url %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
+{% endif %}
+<script>
+  var videoEl = document.getElementById("player");
+  if (videoEl) {
+    initPlayer(
+      videoEl,
+      {{ playable_url|tojson }},
+      {{ hls_url|tojson }}
+    );
+  }
+</script>
+{% endblock %}

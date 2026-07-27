@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}ytdlp{% endblock %}
+{% block content %}
+<div class="landing">
+  <div class="logo"><span class="play">&#9654;</span>ytdlp</div>
+  <p>おすすめフィードは無いので、まずは検索するか、動画URL/IDを直接開いてください。</p>
+
+  <form class="search" action="{{ url_for('results') }}" method="get">
+    <input type="text" name="q" placeholder="動画・チャンネルを検索">
+    <button type="submit">検索</button>
+  </form>
+
+  <form class="direct-open" action="{{ url_for('watch') }}" method="get">
+    <input type="text" name="v" placeholder="動画IDまたはURL (例: dQw4w9WgXcQ)">
+    <button type="submit">開く</button>
+  </form>
+</div>
+{% endblock %}

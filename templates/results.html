@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ query }} - 検索結果{% endblock %}
+{% block content %}
+<h1 class="section-title">「{{ query }}」の検索結果</h1>
+
+{% if entries %}
+<div class="grid">
+  {% for e in entries %}
+  <a class="card" href="{{ url_for('watch', v=e.video_id) }}">
+    <div class="thumb-wrap">
+      {% if e.thumbnail %}<img src="{{ e.thumbnail }}" loading="lazy" alt="">{% endif %}
+      {% if e.duration %}<span class="duration">{{ e.duration|duration }}</span>{% endif %}
+    </div>
+    <div class="meta">
+      <div class="avatar">{{ (e.channel or "?")[:1] }}</div>
+      <div>
+        <div class="title">{{ e.title }}</div>
+        <div class="sub">
+          {{ e.channel }}{% if e.view_count %} &middot; {{ e.view_count|views }}{% endif %}
+        </div>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">見つかりませんでした。別のキーワードで試してみてください。</div>
+{% endif %}
+{% endblock %}

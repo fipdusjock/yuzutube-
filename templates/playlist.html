@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ playlist.title }}{% endblock %}
+{% block content %}
+<h1 class="section-title">{{ playlist.title }}</h1>
+<div style="color:var(--text-secondary); font-size:13px; margin-bottom:24px;">
+  {{ playlist.uploader }}
+  {% if playlist.entry_count_total %} &middot; {{ playlist.entry_count_total }} 本{% endif %}
+</div>
+
+{% if playlist.entries %}
+<div class="grid">
+  {% for e in playlist.entries %}
+  <a class="card" href="{{ url_for('watch', v=e.video_id) }}">
+    <div class="thumb-wrap">
+      {% if e.thumbnail %}<img src="{{ e.thumbnail }}" loading="lazy" alt="">{% endif %}
+      {% if e.duration %}<span class="duration">{{ e.duration|duration }}</span>{% endif %}
+    </div>
+    <div class="meta">
+      <div style="flex:1;">
+        <div class="title">{{ e.title }}</div>
+        <div class="sub">{{ e.channel }}</div>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">動画が見つかりませんでした。</div>
+{% endif %}
+{% endblock %}
