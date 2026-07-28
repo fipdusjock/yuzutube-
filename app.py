@@ -22,7 +22,7 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "Https://disc-you-statements-developed.trycloudflare.com").rstrip("/")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "http://ytdlp56.duckdns.org:5000").rstrip("/")
 SITE_NAME = os.environ.get("SITE_NAME", "Tubely")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
@@ -35,7 +35,7 @@ _URL_RE = re.compile(r"^https?://[^\s]+$")
 
 @app.context_processor
 def inject_globals():
-    return {"site_name": SITE_NAME, "default_api_base": DEFAULT_API_BASE}
+    return {"site_name": SITE_NAME}
 
 
 @app.route("/style.css")
