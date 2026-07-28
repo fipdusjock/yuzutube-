@@ -14,6 +14,7 @@ SITE_NAME環境変数で好きな名前に変更可能。
 """
 
 import os
+import re
 
 import requests
 from flask import Flask, render_template, request, redirect, url_for, abort, send_from_directory, jsonify
@@ -21,7 +22,7 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-API_BASE = os.environ.get("YTDLP_API_BASE_URL", "http://ytdlp56.duckdns.org:5000").rstrip("/")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "http://ytdlp56.duckdns.org:5000").rstrip("/")
 SITE_NAME = os.environ.get("SITE_NAME", "Tubely")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
@@ -29,10 +30,12 @@ PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 # ここは「フェッチが固まって延々ローディングのままにならない」程度の短さでいい。
 PROXY_TIMEOUT = 15
 
+_URL_RE = re.compile(r"^https?://[^\s]+$")
+
 
 @app.context_processor
 def inject_globals():
-    return {"site_name": SITE_NAME}
+    return {"site_name": SITE_NAME, "default_api_base": DEFAULT_API_BASE}
 
 
 @app.route("/style.css")
@@ -99,6 +102,21 @@ def playlist():
     return render_template("playlist.html", playlist_id=list_id)
 
 
+@app.route("/settings")
+def settings():
+    return render_template("settings.html")
+
+
+@app.route("/subscriptions")
+def subscriptions():
+    return render_template("subscriptions.html")
+
+
+@app.route("/history")
+def history():
+    return render_template("history.html")
+
+
 @app.errorhandler(404)
 def not_found(e):
     return render_template("error.html", message="ページが見つかりません"), 404
@@ -106,13 +124,27 @@ def not_found(e):
 
 # ---------- プロキシAPI (ブラウザ側のfetchがここを叩く。JSON専用、常にJSONで返す) ----------
 
+def _resolve_api_base():
+    """
+    設定画面でユーザーが独自のAPI URLを指定していれば(?api_base=...)そちらを使う。
+    未指定/不正な値なら環境変数のデフォルトにフォールバックする。
+    誰でも叩けるエンドポイントなので、httpかhttpsのURLっぽい形かだけは軽く検証しておく
+    (完全なSSRF対策ではない。個人利用のツールという前提)。
+    """
+    override = request.args.get("api_base", "").strip()
+    if override and _URL_RE.match(override):
+        return override.rstrip("/")
+    return DEFAULT_API_BASE
+
+
 def _proxy(path, **params):
+    api_base = _resolve_api_base()
     try:
-        resp = requests.get(f"{API_BASE}{path}", params=params, timeout=PROXY_TIMEOUT)
+        resp = requests.get(f"{api_base}{path}", params=params, timeout=PROXY_TIMEOUT)
     except requests.RequestException as e:
         return jsonify({
             "error": True,
-            "message": f"APIサーバーに接続できませんでした ({API_BASE})。サーバーが起動しているか、"
+            "message": f"APIサーバーに接続できませんでした ({api_base})。サーバーが起動しているか、"
                        f"ポート開放/ドメイン設定が正しいか確認してください。詳細: {e}",
         }), 502
 
@@ -129,6 +161,12 @@ def _proxy(path, **params):
         return jsonify({"error": True, "message": "APIの応答がJSONとして解釈できませんでした。"}), 502
 
     return jsonify(data)
+
+
+@app.route("/proxy/trending")
+def proxy_trending():
+    limit = request.args.get("limit", "24")
+    return _proxy("/api/trending", limit=limit)
 
 
 @app.route("/proxy/search")
