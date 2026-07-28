@@ -8,12 +8,16 @@
 // ==================================================================
 
 const ICONS = {
-  search: '<svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>',
-  menu: '<svg viewBox="0 0 24 24"><rect y="4" width="24" height="2"/><rect y="11" width="24" height="2"/><rect y="18" width="24" height="2"/></svg>',
-  home: '<svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z"/></svg>',
-  play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
-  thumbsUp: '<svg viewBox="0 0 24 24"><path d="M2 21h2a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H2v11zM22 10.5A2.5 2.5 0 0 0 19.5 8H14l.9-4.3a1.5 1.5 0 0 0-2.6-1.3L7 8v13h11a2 2 0 0 0 1.9-1.4l2-6a2.5 2.5 0 0 0-.1-3.1z"/></svg>',
-  comment: '<svg viewBox="0 0 24 24"><path d="M4 4h16v12H7l-3 3z"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="currentColor"><rect y="4" width="24" height="2"/><rect y="11" width="24" height="2"/><rect y="18" width="24" height="2"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>',
+  thumbsUp: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 21h2a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H2v11zM22 10.5A2.5 2.5 0 0 0 19.5 8H14l.9-4.3a1.5 1.5 0 0 0-2.6-1.3L7 8v13h11a2 2 0 0 0 1.9-1.4l2-6a2.5 2.5 0 0 0-.1-3.1z"/></svg>',
+  comment: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v12H7l-3 3z"/></svg>',
+  volume: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M17 8a5 5 0 0 1 0 8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M19.5 5.5a9 9 0 0 1 0 13"/></svg>',
+  volumeMute: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16 9l5 6M21 9l-5 6"/></svg>',
+  fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/></svg>',
 };
 
 function icon(name) {
@@ -40,9 +44,23 @@ function formatDuration(seconds) {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
+function formatCountJa(n) {
+  // YouTube日本語版と同じ「1万」「1.5万」「2.3億」みたいな表記にする。
+  // 1万未満はそのままカンマ区切り。
+  if (n === null || n === undefined) return "";
+  const abs = Math.abs(n);
+  if (abs < 10000) return n.toLocaleString("ja-JP");
+  if (abs < 100000000) {
+    const val = n / 10000;
+    return (Number.isInteger(val) ? val : val.toFixed(1)) + "万";
+  }
+  const val = n / 100000000;
+  return (Number.isInteger(val) ? val : val.toFixed(1)) + "億";
+}
+
 function formatViews(n) {
   if (n === null || n === undefined) return "";
-  return `${n.toLocaleString("ja-JP")} 回視聴`;
+  return `${formatCountJa(n)} 回視聴`;
 }
 
 function formatUploadDate(dateStr) {
@@ -157,7 +175,7 @@ function subscribeButtonHTML(channelId, channelName, thumbnail) {
 
 function likeButtonHTML(videoId, likeCount) {
   const liked = isLiked(videoId);
-  const countText = likeCount ? likeCount.toLocaleString("ja-JP") : "";
+  const countText = likeCount ? formatCountJa(likeCount) : "";
   return `<button class="stat-pill like-btn ${liked ? "active" : ""}" data-action="toggle-like" data-video-id="${escapeHtml(videoId)}">
     ${icon("thumbsUp")}${countText}
   </button>`;
@@ -243,7 +261,7 @@ function commentRowHTML(c) {
           <span class="time">${escapeHtml(c.time_text || "")}</span>
         </div>
         <div class="text">${escapeHtml(c.text || "")}</div>
-        ${c.like_count ? `<div class="likes">${icon("thumbsUp")}${c.like_count}</div>` : ""}
+        ${c.like_count ? `<div class="likes">${icon("thumbsUp")}${formatCountJa(c.like_count)}</div>` : ""}
       </div>
     </div>`;
 }
@@ -333,7 +351,7 @@ function renderVideoInfo(box, info, videoId) {
   const stats = [];
   if (info.view_count) stats.push(`<span class="stat-pill">${escapeHtml(formatViews(info.view_count))}</span>`);
   stats.push(likeButtonHTML(videoId, info.like_count));
-  if (info.comment_count) stats.push(`<span class="stat-pill">${icon("comment")}${info.comment_count.toLocaleString("ja-JP")}</span>`);
+  if (info.comment_count) stats.push(`<span class="stat-pill">${icon("comment")}${formatCountJa(info.comment_count)}</span>`);
 
   const chapters = (info.chapters || [])
     .map((c) => `<div class="chapter-row"><span class="ts">${escapeHtml(formatDuration(Math.floor(c.start_time || 0)))}</span><span>${escapeHtml(c.title || "")}</span></div>`)
@@ -346,7 +364,7 @@ function renderVideoInfo(box, info, videoId) {
         <div class="avatar">${escapeHtml((channelName || "?")[0] || "?")}</div>
         <div>
           <div class="name">${channelLink}</div>
-          ${info.channel_follower_count ? `<div class="subs">${info.channel_follower_count.toLocaleString("ja-JP")} 人の登録者</div>` : ""}
+          ${info.channel_follower_count ? `<div class="subs">${formatCountJa(info.channel_follower_count)} 人の登録者</div>` : ""}
         </div>
         ${subscribeButtonHTML(info.channel_id, channelName, info.thumbnail)}
       </div>
@@ -364,38 +382,177 @@ function renderVideoInfo(box, info, videoId) {
 
 function renderPlayer(wrap, stream, info) {
   const streams = stream.streams || [];
-  const combined = streams
-    .filter((s) => s.url && s.vcodec && s.vcodec !== "none" && s.acodec && s.acodec !== "none")
-    .sort((a, b) => (b.height || 0) - (a.height || 0));
-  const playableUrl = combined.length ? combined[0].url : null;
+  const combined = streams.filter((s) => s.url && s.vcodec && s.vcodec !== "none" && s.acodec && s.acodec !== "none");
   const hlsUrl = stream.hls_url || null;
 
-  if (!playableUrl && !hlsUrl) {
+  // 解像度が同じフォーマットが複数あれば、ビットレートが高い方を代表として残す
+  const byHeight = new Map();
+  combined.forEach((s) => {
+    const h = s.height || 0;
+    const existing = byHeight.get(h);
+    if (!existing || (s.tbr || 0) > (existing.tbr || 0)) byHeight.set(h, s);
+  });
+  const qualities = Array.from(byHeight.values()).sort((a, b) => (b.height || 0) - (a.height || 0));
+
+  if (!qualities.length && !hlsUrl) {
     wrap.innerHTML = '<div class="player-fallback">再生可能なフォーマットが見つかりませんでした。<br>(映像+音声が一体になったフォーマットが無い動画の可能性があります)</div>';
     return;
   }
 
+  // 既定は itag 18 (360p)。無ければ一番高画質のものにフォールバック。
+  const defaultQuality = qualities.find((q) => q.format_id === "18") || qualities[0] || null;
   const posterAttr = info.thumbnail ? ` poster="${escapeHtml(info.thumbnail)}"` : "";
-  wrap.innerHTML = `<video id="player" controls playsinline${posterAttr}></video>`;
-  const videoEl = document.getElementById("player");
 
-  if (playableUrl) {
-    videoEl.src = playableUrl;
-    return;
+  const qualityOptionsHTML = qualities
+    .map((q) => {
+      const label = q.height ? `${q.height}p` : (q.format_note || q.format_id || "?");
+      const isDefault = defaultQuality && q.format_id === defaultQuality.format_id;
+      return `<option value="${escapeHtml(q.format_id)}" ${isDefault ? "selected" : ""}>${escapeHtml(label)}${q.format_id === "18" ? " (標準)" : ""}</option>`;
+    })
+    .join("");
+
+  wrap.innerHTML = `
+    <div class="custom-player" id="customPlayer">
+      <video id="player" playsinline${posterAttr}></video>
+      <div class="player-controls">
+        <input type="range" class="seek-bar" id="seekBar" min="0" max="100" value="0" step="0.1">
+        <div class="controls-row">
+          <button class="ctrl-btn" id="playPauseBtn" aria-label="再生">${icon("play")}</button>
+          <div class="time-display"><span id="curTime">0:00</span>&nbsp;/&nbsp;<span id="durTime">0:00</span></div>
+          <div class="spacer"></div>
+          <button class="ctrl-btn" id="muteBtn" aria-label="ミュート切替">${icon("volume")}</button>
+          <input type="range" class="volume-bar" id="volumeBar" min="0" max="100" value="100" aria-label="音量">
+          ${qualities.length > 1 ? `<select class="quality-select" id="qualitySelect" aria-label="画質">${qualityOptionsHTML}</select>` : ""}
+          <button class="ctrl-btn" id="fullscreenBtn" aria-label="全画面表示">${icon("fullscreen")}</button>
+        </div>
+      </div>
+    </div>`;
+
+  const videoEl = document.getElementById("player");
+  const playerRoot = document.getElementById("customPlayer");
+
+  function loadSource(url, resumePlayback) {
+    const wasPlaying = resumePlayback && !videoEl.paused;
+    const resumeTime = resumePlayback ? videoEl.currentTime : 0;
+    videoEl.src = url;
+    if (resumePlayback) {
+      const onMeta = () => {
+        videoEl.currentTime = resumeTime;
+        if (wasPlaying) videoEl.play().catch(() => {});
+        videoEl.removeEventListener("loadedmetadata", onMeta);
+      };
+      videoEl.addEventListener("loadedmetadata", onMeta);
+    }
   }
 
+  if (defaultQuality) {
+    loadSource(defaultQuality.url, false);
+  } else if (hlsUrl) {
+    attachHlsSource(videoEl, hlsUrl);
+  }
+
+  wireCustomPlayerControls(videoEl, playerRoot);
+
+  const qualitySelect = document.getElementById("qualitySelect");
+  if (qualitySelect) {
+    qualitySelect.addEventListener("change", () => {
+      const chosen = qualities.find((q) => q.format_id === qualitySelect.value);
+      if (chosen) loadSource(chosen.url, true);
+    });
+  }
+}
+
+function attachHlsSource(videoEl, hlsUrl) {
   if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
     videoEl.src = hlsUrl;
     return;
   }
-
   if (window.Hls && window.Hls.isSupported()) {
     const hls = new Hls();
     hls.loadSource(hlsUrl);
     hls.attachMedia(videoEl);
-  } else {
-    wrap.innerHTML = `<div class="player-fallback">このブラウザではHLS再生に対応していません。<br><a href="${escapeHtml(hlsUrl)}">直接リンクを開く</a></div>`;
   }
+}
+
+function formatPlayerTime(sec) {
+  if (!isFinite(sec) || sec < 0) return "0:00";
+  sec = Math.floor(sec);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+function wireCustomPlayerControls(videoEl, playerRoot) {
+  const playBtn = playerRoot.querySelector("#playPauseBtn");
+  const seekBar = playerRoot.querySelector("#seekBar");
+  const curTimeEl = playerRoot.querySelector("#curTime");
+  const durTimeEl = playerRoot.querySelector("#durTime");
+  const muteBtn = playerRoot.querySelector("#muteBtn");
+  const volumeBar = playerRoot.querySelector("#volumeBar");
+  const fullscreenBtn = playerRoot.querySelector("#fullscreenBtn");
+
+  let seeking = false;
+
+  function togglePlay() {
+    if (videoEl.paused) videoEl.play().catch(() => {});
+    else videoEl.pause();
+  }
+
+  playBtn.addEventListener("click", togglePlay);
+  videoEl.addEventListener("click", togglePlay);
+  videoEl.addEventListener("play", () => { playBtn.innerHTML = icon("pause"); });
+  videoEl.addEventListener("pause", () => { playBtn.innerHTML = icon("play"); });
+
+  videoEl.addEventListener("timeupdate", () => {
+    curTimeEl.textContent = formatPlayerTime(videoEl.currentTime);
+    if (!seeking && videoEl.duration) {
+      seekBar.value = (videoEl.currentTime / videoEl.duration) * 100;
+    }
+  });
+  videoEl.addEventListener("loadedmetadata", () => {
+    durTimeEl.textContent = formatPlayerTime(videoEl.duration);
+  });
+
+  seekBar.addEventListener("input", () => {
+    seeking = true;
+    if (videoEl.duration) {
+      curTimeEl.textContent = formatPlayerTime((seekBar.value / 100) * videoEl.duration);
+    }
+  });
+  seekBar.addEventListener("change", () => {
+    if (videoEl.duration) {
+      videoEl.currentTime = (seekBar.value / 100) * videoEl.duration;
+    }
+    seeking = false;
+  });
+
+  function updateVolumeIcon() {
+    muteBtn.innerHTML = (videoEl.muted || videoEl.volume === 0) ? icon("volumeMute") : icon("volume");
+  }
+
+  volumeBar.addEventListener("input", () => {
+    videoEl.volume = volumeBar.value / 100;
+    videoEl.muted = videoEl.volume === 0;
+    updateVolumeIcon();
+  });
+  muteBtn.addEventListener("click", () => {
+    videoEl.muted = !videoEl.muted;
+    if (!videoEl.muted && videoEl.volume === 0) {
+      videoEl.volume = 1;
+      volumeBar.value = 100;
+    }
+    updateVolumeIcon();
+  });
+
+  fullscreenBtn.addEventListener("click", () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      playerRoot.requestFullscreen().catch(() => {});
+    }
+  });
 }
 
 async function initChannelPage(channelId) {
@@ -403,16 +560,28 @@ async function initChannelPage(channelId) {
   const grid = document.getElementById("channelGrid");
   try {
     const data = await fetchJSON(`/proxy/channel/${encodeURIComponent(channelId)}?limit=30`);
+    const avatarSrc = data.avatar_base64 || data.avatar;
+    const bannerSrc = data.banner_base64 || data.banner;
+
+    const bannerHTML = bannerSrc
+      ? `<div class="channel-banner"><img src="${escapeHtml(bannerSrc)}" alt=""></div>`
+      : "";
+
+    const avatarHTML = avatarSrc
+      ? `<img src="${escapeHtml(avatarSrc)}" alt="">`
+      : escapeHtml((data.channel || "?")[0] || "?");
+
     header.innerHTML = `
+      ${bannerHTML}
       <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; flex-wrap:wrap;">
-        <div class="avatar" style="width:64px;height:64px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:24px;">
-          ${escapeHtml((data.channel || "?")[0] || "?")}
+        <div class="avatar" style="width:64px;height:64px;border-radius:50%;background:var(--bg-elevated);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:24px;">
+          ${avatarHTML}
         </div>
         <div style="flex:1;">
           <div style="font-size:20px; font-weight:600;">${escapeHtml(data.channel || "")}</div>
-          ${data.channel_follower_count ? `<div style="color:var(--text-secondary); font-size:13px;">${data.channel_follower_count.toLocaleString("ja-JP")} 人の登録者</div>` : ""}
+          ${data.channel_follower_count ? `<div style="color:var(--text-secondary); font-size:13px;">${formatCountJa(data.channel_follower_count)} 人の登録者</div>` : ""}
         </div>
-        ${subscribeButtonHTML(channelId, data.channel, null)}
+        ${subscribeButtonHTML(channelId, data.channel, avatarSrc)}
       </div>
       ${data.description ? `<div class="description-box" style="margin-bottom:24px;">${escapeHtml(data.description)}</div>` : ""}`;
 
