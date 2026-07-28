@@ -1,19 +1,18 @@
 {% extends "base.html" %}
 {% block title %}設定 - {{ site_name }}{% endblock %}
 {% block page_id %}settings{% endblock %}
-{% block body_data %}data-default-api-base="{{ default_api_base }}"{% endblock %}
 {% block content %}
 <h1 class="section-title">設定</h1>
 
 <div class="settings-box">
   <div class="settings-label">API サーバーのURL</div>
   <div class="settings-desc">
-    ytdlp_apiのURLです。既定値は <code>{{ default_api_base }}</code>。
+    ytdlp_apiのURLです。未入力の場合は既定のサーバーが使われます。
     自分のサーバーが別の場所にある場合や、Cloudflare Tunnel等でURLが変わった場合はここで変更できます。
     このブラウザだけに保存され、サーバー側には保存されません。
   </div>
   <div class="settings-row">
-    <input type="text" id="apiBaseInput" placeholder="{{ default_api_base }}">
+    <input type="text" id="apiBaseInput" placeholder="https://your-api.example.com">
     <button id="saveApiBase">保存</button>
     <button id="resetApiBase" class="secondary">既定値に戻す</button>
   </div>
