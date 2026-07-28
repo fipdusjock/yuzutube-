@@ -22,7 +22,7 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://disc-you-statements-developed.trycloudflare.com").rstrip("/")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "http://ytdlp56.duckdns.org:5000").rstrip("/")
 SITE_NAME = os.environ.get("SITE_NAME", "Tubely")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
@@ -137,10 +137,10 @@ def _resolve_api_base():
     return DEFAULT_API_BASE
 
 
-def _proxy(path, **params):
+def _proxy(path, method="GET", **params):
     api_base = _resolve_api_base()
     try:
-        resp = requests.get(f"{api_base}{path}", params=params, timeout=PROXY_TIMEOUT)
+        resp = requests.request(method, f"{api_base}{path}", params=params, timeout=PROXY_TIMEOUT)
     except requests.RequestException as e:
         return jsonify({
             "error": True,
@@ -202,6 +202,13 @@ def proxy_comments(video_id):
 def proxy_livechat(video_id):
     limit = request.args.get("limit", "200")
     return _proxy(f"/api/livechat/{video_id}", limit=limit)
+
+
+@app.route("/proxy/cache-clear-all", methods=["DELETE"])
+def proxy_cache_clear_all():
+    """サーバー側(ytdlp_api)のキャッシュを全部消す。間違ったデータがキャッシュされた時の
+    強制リフレッシュ用。/settings ページから叩ける。"""
+    return _proxy("/api/cache", method="DELETE")
 
 
 @app.route("/proxy/channel/<channel_id>")
