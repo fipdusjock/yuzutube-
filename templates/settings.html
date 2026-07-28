@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}設定 - {{ site_name }}{% endblock %}
+{% block page_id %}settings{% endblock %}
+{% block content %}
+<h1 class="section-title">設定</h1>
+
+<div class="settings-box">
+  <div class="settings-label">API サーバーのURL</div>
+  <div class="settings-desc">
+    ytdlp_apiのURLです。未入力の場合は既定のサーバーが使われます。
+    自分のサーバーが別の場所にある場合や、Cloudflare Tunnel等でURLが変わった場合はここで変更できます。
+    このブラウザだけに保存され、サーバー側には保存されません。
+  </div>
+  <div class="settings-row">
+    <input type="text" id="apiBaseInput" placeholder="https://your-api.example.com">
+    <button id="saveApiBase">保存</button>
+    <button id="resetApiBase" class="secondary">既定値に戻す</button>
+  </div>
+  <div class="settings-status" id="apiBaseStatus"></div>
+</div>
+
+<div class="settings-box">
+  <div class="settings-label">登録チャンネル・高評価・視聴履歴について</div>
+  <div class="settings-desc">
+    これらはすべてこのブラウザのローカルストレージにだけ保存される「仮」の機能です。
+    実際のYouTubeアカウントには一切反映されません。データを消したい場合は下のボタンから削除できます。
+  </div>
+  <div class="settings-row">
+    <button id="clearLocalData" class="secondary">登録・高評価・履歴をすべて削除</button>
+  </div>
+  <div class="settings-status" id="clearStatus"></div>
+</div>
+{% endblock %}
