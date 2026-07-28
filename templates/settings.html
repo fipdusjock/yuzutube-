@@ -30,4 +30,18 @@
   </div>
   <div class="settings-status" id="clearStatus"></div>
 </div>
+
+<div class="settings-box">
+  <div class="settings-label">サーバー側のキャッシュ</div>
+  <div class="settings-desc">
+    動画情報・チャンネル情報などは<code>ytdlp_api</code>側で7時間キャッシュされています。
+    誤った情報がキャッシュされてしまった場合や、最新の状態を取り直したい場合はここから
+    サーバー側のキャッシュを全部消せます(このブラウザのデータではなく、サーバーが
+    保存しているキャッシュです。他の利用者にも影響します)。
+  </div>
+  <div class="settings-row">
+    <button id="clearServerCache" class="secondary">サーバー側のキャッシュを全部削除</button>
+  </div>
+  <div class="settings-status" id="serverCacheStatus"></div>
+</div>
 {% endblock %}
