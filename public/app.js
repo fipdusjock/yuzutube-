@@ -232,6 +232,9 @@ function videoCardHTML(e, watchHref) {
     ? `<span class="duration live-badge">LIVE</span>`
     : (e.duration ? `<span class="duration">${escapeHtml(formatDuration(e.duration))}</span>` : "");
   const views = e.view_count ? formatViews(e.view_count) : (e.view_count_text || "");
+  const avatarHTML = e.channel_thumbnail
+    ? `<img src="${escapeHtml(e.channel_thumbnail)}" alt="" loading="lazy">`
+    : escapeHtml((e.channel || "?")[0] || "?");
   return `
     <a class="card" href="${watchHref}">
       <div class="thumb-wrap">
@@ -239,7 +242,7 @@ function videoCardHTML(e, watchHref) {
         ${badge}
       </div>
       <div class="meta">
-        <div class="avatar">${escapeHtml((e.channel || "?")[0] || "?")}</div>
+        <div class="avatar">${avatarHTML}</div>
         <div>
           <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>
           <div class="sub">${escapeHtml(e.channel || "")}${isLive ? "" : (views ? " &middot; " + escapeHtml(views) : "")}</div>
@@ -541,11 +544,21 @@ function renderPlayer(wrap, stream, info) {
     const resync = () => {
       if (!syncState.audioEl) return;
       const drift = videoEl.currentTime - syncState.audioEl.currentTime;
-      if (Math.abs(drift) > 0.3) {
+      const absDrift = Math.abs(drift);
+      if (absDrift > 1.0) {
+        // 大きくズレた時(バッファリング停止直後など)だけハードシークで合わせ直す。
+        // seekは音が一瞬途切れるので、これは本当にズレが大きい時だけにする。
         syncState.audioEl.currentTime = videoEl.currentTime;
+        syncState.audioEl.playbackRate = 1.0;
+      } else if (absDrift > 0.15) {
+        // 小さいズレはseekせず、再生速度をほんの少しだけ speed up/down して
+        // 滑らかに追従させる(音が途切れない)。
+        syncState.audioEl.playbackRate = drift > 0 ? 1.05 : 0.95;
+      } else {
+        syncState.audioEl.playbackRate = 1.0;
       }
     };
-    syncState.intervalId = setInterval(resync, 1000);
+    syncState.intervalId = setInterval(resync, 500);
   }
 
   function loadSource(quality, resumePlayback) {
@@ -846,6 +859,28 @@ function initSettingsPage() {
     localStorage.removeItem(HISTORY_KEY);
     clearStatus.textContent = "削除しました。";
   });
+
+  const clearServerCacheBtn = document.getElementById("clearServerCache");
+  const serverCacheStatus = document.getElementById("serverCacheStatus");
+  if (clearServerCacheBtn) {
+    clearServerCacheBtn.addEventListener("click", async () => {
+      clearServerCacheBtn.disabled = true;
+      serverCacheStatus.textContent = "削除中...";
+      try {
+        const extra = apiBaseQueryParam();
+        const url = "/proxy/cache-clear-all" + (extra ? `?${extra}` : "");
+        const res = await fetch(url, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.message || `HTTPエラー (${res.status})`);
+        serverCacheStatus.textContent =
+          `削除しました(一覧: ${data.index_entries_removed}件 / レスポンスキャッシュ: ${data.response_cache_entries_removed}件)`;
+      } catch (e) {
+        serverCacheStatus.textContent = `失敗しました: ${e.message}`;
+      } finally {
+        clearServerCacheBtn.disabled = false;
+      }
+    });
+  }
 }
 
 // ---------- サイドバー開閉(モバイル幅) ----------
