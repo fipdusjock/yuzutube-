@@ -252,9 +252,12 @@ function relatedCardHTML(e) {
 }
 
 function commentRowHTML(c) {
+  const avatarHTML = c.author_thumbnail
+    ? `<img src="${escapeHtml(c.author_thumbnail)}" alt="" loading="lazy">`
+    : escapeHtml((c.author || "?")[0] || "?");
   return `
     <div class="comment-row">
-      <div class="avatar">${escapeHtml((c.author || "?")[0] || "?")}</div>
+      <div class="avatar">${avatarHTML}</div>
       <div style="flex:1;">
         <div>
           <span class="author">${escapeHtml(c.author || "")}</span>
@@ -347,6 +350,10 @@ function renderVideoInfo(box, info, videoId) {
   const channelLink = info.channel_id
     ? `<a href="/channel/${encodeURIComponent(info.channel_id)}">${escapeHtml(channelName)}</a>`
     : escapeHtml(channelName);
+  const ownerAvatarSrc = info.channel_avatar_base64 || info.channel_avatar;
+  const ownerAvatarHTML = ownerAvatarSrc
+    ? `<img src="${escapeHtml(ownerAvatarSrc)}" alt="" loading="lazy">`
+    : escapeHtml((channelName || "?")[0] || "?");
 
   const stats = [];
   if (info.view_count) stats.push(`<span class="stat-pill">${escapeHtml(formatViews(info.view_count))}</span>`);
@@ -361,23 +368,32 @@ function renderVideoInfo(box, info, videoId) {
     <div class="video-title">${escapeHtml(info.title || "")}</div>
     <div class="video-owner-row">
       <div class="video-owner">
-        <div class="avatar">${escapeHtml((channelName || "?")[0] || "?")}</div>
+        <div class="avatar">${ownerAvatarHTML}</div>
         <div>
           <div class="name">${channelLink}</div>
           ${info.channel_follower_count ? `<div class="subs">${formatCountJa(info.channel_follower_count)} 人の登録者</div>` : ""}
         </div>
-        ${subscribeButtonHTML(info.channel_id, channelName, info.thumbnail)}
+        ${subscribeButtonHTML(info.channel_id, channelName, ownerAvatarSrc)}
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">${stats.join("")}</div>
     </div>
-    <div class="description-box">
-      <div class="top-line">
-        ${info.upload_date ? escapeHtml(formatUploadDate(info.upload_date)) : ""}
-        ${info.tags && info.tags.length ? " &middot; " + escapeHtml(info.tags.slice(0, 8).join(", ")) : ""}
+    <div class="description-box" id="descriptionBox">
+      <div class="description-inner">
+        ${info.upload_date ? `<div class="top-line">${escapeHtml(formatUploadDate(info.upload_date))}</div>` : ""}
+        <div class="description-text">${escapeHtml(info.description || "(説明文なし)")}</div>
+        ${chapters ? `<div class="chapters"><div style="font-weight:600; margin-bottom:6px;">チャプター</div>${chapters}</div>` : ""}
       </div>
-      ${escapeHtml(info.description || "(説明文なし)")}
-      ${chapters ? `<div class="chapters"><div style="font-weight:600; margin-bottom:6px;">チャプター</div>${chapters}</div>` : ""}
+      <button type="button" class="desc-toggle-btn" id="descToggleBtn">もっと見る</button>
     </div>`;
+
+  const descBox = box.querySelector("#descriptionBox");
+  const descToggleBtn = box.querySelector("#descToggleBtn");
+  if (descBox && descToggleBtn) {
+    descBox.addEventListener("click", () => {
+      const expanded = descBox.classList.toggle("expanded");
+      descToggleBtn.textContent = expanded ? "閉じる" : "もっと見る";
+    });
+  }
 }
 
 function renderPlayer(wrap, stream, info) {
@@ -422,7 +438,7 @@ function renderPlayer(wrap, stream, info) {
           <div class="spacer"></div>
           <button class="ctrl-btn" id="muteBtn" aria-label="ミュート切替">${icon("volume")}</button>
           <input type="range" class="volume-bar" id="volumeBar" min="0" max="100" value="100" aria-label="音量">
-          ${qualities.length > 1 ? `<select class="quality-select" id="qualitySelect" aria-label="画質">${qualityOptionsHTML}</select>` : ""}
+          ${qualities.length >= 1 ? `<select class="quality-select" id="qualitySelect" aria-label="画質">${qualityOptionsHTML}</select>` : ""}
           <button class="ctrl-btn" id="fullscreenBtn" aria-label="全画面表示">${icon("fullscreen")}</button>
         </div>
       </div>
@@ -495,6 +511,14 @@ function wireCustomPlayerControls(videoEl, playerRoot) {
 
   let seeking = false;
 
+  function updateSeekBarFill(pct) {
+    // 再生し終わった(赤丸より左側)部分を白く塗る。input[type=range]は
+    // 単純なbackgroundだと全体が同じ色になるので、gradientで自前に描く。
+    seekBar.style.background =
+      `linear-gradient(to right, #fff 0%, #fff ${pct}%, rgba(255,255,255,0.3) ${pct}%, rgba(255,255,255,0.3) 100%)`;
+  }
+  updateSeekBarFill(0);
+
   function togglePlay() {
     if (videoEl.paused) videoEl.play().catch(() => {});
     else videoEl.pause();
@@ -508,7 +532,9 @@ function wireCustomPlayerControls(videoEl, playerRoot) {
   videoEl.addEventListener("timeupdate", () => {
     curTimeEl.textContent = formatPlayerTime(videoEl.currentTime);
     if (!seeking && videoEl.duration) {
-      seekBar.value = (videoEl.currentTime / videoEl.duration) * 100;
+      const pct = (videoEl.currentTime / videoEl.duration) * 100;
+      seekBar.value = pct;
+      updateSeekBarFill(pct);
     }
   });
   videoEl.addEventListener("loadedmetadata", () => {
@@ -517,6 +543,7 @@ function wireCustomPlayerControls(videoEl, playerRoot) {
 
   seekBar.addEventListener("input", () => {
     seeking = true;
+    updateSeekBarFill(seekBar.value);
     if (videoEl.duration) {
       curTimeEl.textContent = formatPlayerTime((seekBar.value / 100) * videoEl.duration);
     }
@@ -547,10 +574,18 @@ function wireCustomPlayerControls(videoEl, playerRoot) {
   });
 
   fullscreenBtn.addEventListener("click", () => {
+    // iOS Safariは要素単位のFullscreen APIに対応していないことが多く、
+    // videoタグ自身のwebkitEnterFullscreen(ネイティブの全画面プレイヤー)を使う必要がある。
     if (document.fullscreenElement) {
       document.exitFullscreen();
-    } else {
-      playerRoot.requestFullscreen().catch(() => {});
+      return;
+    }
+    if (playerRoot.requestFullscreen) {
+      playerRoot.requestFullscreen().catch(() => {
+        if (videoEl.webkitEnterFullscreen) videoEl.webkitEnterFullscreen();
+      });
+    } else if (videoEl.webkitEnterFullscreen) {
+      videoEl.webkitEnterFullscreen();
     }
   });
 }

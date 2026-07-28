@@ -481,6 +481,9 @@ main.content {
   margin-top: 12px;
   font-size: 14px;
   line-height: 1.6;
+  cursor: pointer;
+}
+.description-box .description-inner {
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -488,6 +491,27 @@ main.content {
   color: var(--text-secondary);
   font-size: 13px;
   margin-bottom: 8px;
+}
+
+/* 既定は折りたたみ状態。YouTubeと同じく本文3行+チャプター等は非表示にしておき、
+   「もっと見る」を押すと展開してチャプター等も見えるようにする。 */
+.description-box:not(.expanded) .description-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.description-box:not(.expanded) .chapters { display: none; }
+
+.desc-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  margin-top: 8px;
+  padding: 0;
+  cursor: pointer;
 }
 
 .chapters { margin-top: 12px; }
