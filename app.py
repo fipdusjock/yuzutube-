@@ -22,7 +22,7 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://disc-you-statements-developed.trycloudflare.com").rstrip("/")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "http://ytdlp56.duckdns.org:5000").rstrip("/")
 SITE_NAME = os.environ.get("SITE_NAME", "Tubely")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
@@ -261,9 +261,11 @@ def media_proxy(video_id):
 
     def gen():
         try:
-            for chunk in upstream.iter_content(65536):
+            for chunk in upstream.iter_content(262144):
                 if chunk:
                     yield chunk
+        except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError):
+            pass
         finally:
             upstream.close()
 
