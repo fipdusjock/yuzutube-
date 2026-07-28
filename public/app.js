@@ -2,6 +2,9 @@
 // Tubely フロントエンドのクライアント側ロジック。
 // ページは即座に(スケルトン状態で)表示されていて、ここが /proxy/* を叩いて
 // 中身を後から差し込む。絵文字は使わずSVGアイコンで統一している。
+//
+// 登録チャンネル/高評価/視聴履歴はすべてlocalStorageだけで完結する「仮」の機能。
+// 実際のYouTubeアカウントには一切反映されない(設定ページにもその旨明記してある)。
 // ==================================================================
 
 const ICONS = {
@@ -47,8 +50,20 @@ function formatUploadDate(dateStr) {
   return `${dateStr.slice(0, 4)}/${dateStr.slice(4, 6)}/${dateStr.slice(6, 8)}`;
 }
 
+// ---------- ローカル設定(APIサーバーのURL上書き) ----------
+
+const API_BASE_KEY = "tubely_api_base";
+
+function apiBaseQueryParam() {
+  const override = localStorage.getItem(API_BASE_KEY);
+  return override ? `api_base=${encodeURIComponent(override)}` : "";
+}
+
 async function fetchJSON(url) {
-  const res = await fetch(url);
+  const extra = apiBaseQueryParam();
+  const finalUrl = extra ? `${url}${url.includes("?") ? "&" : "?"}${extra}` : url;
+
+  const res = await fetch(finalUrl);
   let data;
   try {
     data = await res.json();
@@ -65,6 +80,108 @@ function showError(container, message) {
   container.innerHTML = `<div class="empty-state">うまく取得できませんでした<br><br>${escapeHtml(message)}</div>`;
 }
 
+// ---------- ローカルストレージ(登録チャンネル/高評価/視聴履歴、すべて「仮」) ----------
+
+const SUBS_KEY = "tubely_subscriptions";
+const LIKES_KEY = "tubely_likes";
+const HISTORY_KEY = "tubely_history";
+
+function getJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function setJSON(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function isSubscribed(channelId) {
+  return getJSON(SUBS_KEY, []).some((s) => s.channel_id === channelId);
+}
+
+function toggleSubscribe(channelId, meta) {
+  const subs = getJSON(SUBS_KEY, []);
+  const idx = subs.findIndex((s) => s.channel_id === channelId);
+  if (idx >= 0) {
+    subs.splice(idx, 1);
+    setJSON(SUBS_KEY, subs);
+    return false;
+  }
+  subs.unshift({ channel_id: channelId, channel: meta.channel || "", thumbnail: meta.thumbnail || "" });
+  setJSON(SUBS_KEY, subs);
+  return true;
+}
+
+function isLiked(videoId) {
+  return getJSON(LIKES_KEY, []).includes(videoId);
+}
+
+function toggleLike(videoId) {
+  const likes = getJSON(LIKES_KEY, []);
+  const idx = likes.indexOf(videoId);
+  if (idx >= 0) {
+    likes.splice(idx, 1);
+    setJSON(LIKES_KEY, likes);
+    return false;
+  }
+  likes.push(videoId);
+  setJSON(LIKES_KEY, likes);
+  return true;
+}
+
+function addHistory(entry) {
+  let hist = getJSON(HISTORY_KEY, []);
+  hist = hist.filter((h) => h.video_id !== entry.video_id);
+  hist.unshift({ ...entry, watched_at: Date.now() });
+  if (hist.length > 200) hist = hist.slice(0, 200);
+  setJSON(HISTORY_KEY, hist);
+}
+
+// ---------- ボタンのHTML片(登録/高評価。クリックはイベント委譲で処理) ----------
+
+function subscribeButtonHTML(channelId, channelName, thumbnail) {
+  if (!channelId) return "";
+  const subscribed = isSubscribed(channelId);
+  return `<button class="subscribe-btn ${subscribed ? "subscribed" : ""}"
+    data-action="toggle-subscribe"
+    data-channel-id="${escapeHtml(channelId)}"
+    data-channel-name="${escapeHtml(channelName || "")}"
+    data-channel-thumb="${escapeHtml(thumbnail || "")}">
+    ${subscribed ? "登録済み" : "チャンネル登録"}
+  </button>`;
+}
+
+function likeButtonHTML(videoId, likeCount) {
+  const liked = isLiked(videoId);
+  const countText = likeCount ? likeCount.toLocaleString("ja-JP") : "";
+  return `<button class="stat-pill like-btn ${liked ? "active" : ""}" data-action="toggle-like" data-video-id="${escapeHtml(videoId)}">
+    ${icon("thumbsUp")}${countText}
+  </button>`;
+}
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
+
+  if (btn.dataset.action === "toggle-subscribe") {
+    const nowSubscribed = toggleSubscribe(btn.dataset.channelId, {
+      channel: btn.dataset.channelName,
+      thumbnail: btn.dataset.channelThumb,
+    });
+    btn.classList.toggle("subscribed", nowSubscribed);
+    btn.textContent = nowSubscribed ? "登録済み" : "チャンネル登録";
+  }
+
+  if (btn.dataset.action === "toggle-like") {
+    const nowLiked = toggleLike(btn.dataset.videoId);
+    btn.classList.toggle("active", nowLiked);
+  }
+});
+
 // ---------- スケルトン ----------
 
 function skeletonCardHTML() {
@@ -79,22 +196,6 @@ function skeletonCardHTML() {
         </div>
       </div>
     </div>`;
-}
-
-function skeletonGridHTML(count) {
-  return Array.from({ length: count }, skeletonCardHTML).join("");
-}
-
-function skeletonRelatedHTML(count) {
-  const row = `
-    <div class="related-card">
-      <div class="sk sk-thumb" style="width:168px;"></div>
-      <div style="flex:1;">
-        <div class="sk sk-line w90"></div>
-        <div class="sk sk-line w60"></div>
-      </div>
-    </div>`;
-  return Array.from({ length: count }, () => row).join("");
 }
 
 // ---------- カードのHTML(実データ) ----------
@@ -149,6 +250,19 @@ function commentRowHTML(c) {
 
 // ---------- ページごとの初期化 ----------
 
+async function initIndexPage() {
+  const grid = document.getElementById("trendingGrid");
+  try {
+    const data = await fetchJSON("/proxy/trending?limit=24");
+    const entries = data.entries || [];
+    grid.innerHTML = entries.length
+      ? entries.map((e) => videoCardHTML(e, `/watch?v=${encodeURIComponent(e.video_id)}`)).join("")
+      : '<div class="empty-state">動画が見つかりませんでした。</div>';
+  } catch (e) {
+    showError(grid.parentElement, e.message);
+  }
+}
+
 async function initResultsPage(query) {
   const grid = document.getElementById("resultsGrid");
   try {
@@ -170,15 +284,22 @@ async function initWatchPage(videoId) {
   const commentsBox = document.getElementById("commentsList");
   const playerWrap = document.getElementById("playerWrap");
 
-  // info + streamは並行で取りに行く
   const infoPromise = fetchJSON(`/proxy/info/${encodeURIComponent(videoId)}`);
   const streamPromise = fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`);
 
   try {
     const [info, stream] = await Promise.all([infoPromise, streamPromise]);
-    renderVideoInfo(infoBox, info);
+    renderVideoInfo(infoBox, info, videoId);
     renderPlayer(playerWrap, stream, info);
     document.title = info.title ? `${info.title} - ${document.title.split(" - ").pop()}` : document.title;
+
+    addHistory({
+      video_id: videoId,
+      title: info.title || "",
+      channel: info.channel || info.uploader || "",
+      thumbnail: info.thumbnail || "",
+      duration: info.duration || null,
+    });
   } catch (e) {
     showError(infoBox, e.message);
     playerWrap.innerHTML = `<div class="player-fallback">${escapeHtml(e.message)}</div>`;
@@ -203,14 +324,15 @@ async function initWatchPage(videoId) {
     .catch((e) => showError(commentsBox, e.message));
 }
 
-function renderVideoInfo(box, info) {
+function renderVideoInfo(box, info, videoId) {
+  const channelName = info.channel || info.uploader || "";
   const channelLink = info.channel_id
-    ? `<a href="/channel/${encodeURIComponent(info.channel_id)}">${escapeHtml(info.channel || info.uploader || "")}</a>`
-    : escapeHtml(info.channel || info.uploader || "");
+    ? `<a href="/channel/${encodeURIComponent(info.channel_id)}">${escapeHtml(channelName)}</a>`
+    : escapeHtml(channelName);
 
   const stats = [];
   if (info.view_count) stats.push(`<span class="stat-pill">${escapeHtml(formatViews(info.view_count))}</span>`);
-  if (info.like_count) stats.push(`<span class="stat-pill">${icon("thumbsUp")}${info.like_count.toLocaleString("ja-JP")}</span>`);
+  stats.push(likeButtonHTML(videoId, info.like_count));
   if (info.comment_count) stats.push(`<span class="stat-pill">${icon("comment")}${info.comment_count.toLocaleString("ja-JP")}</span>`);
 
   const chapters = (info.chapters || [])
@@ -221,11 +343,12 @@ function renderVideoInfo(box, info) {
     <div class="video-title">${escapeHtml(info.title || "")}</div>
     <div class="video-owner-row">
       <div class="video-owner">
-        <div class="avatar">${escapeHtml((info.channel || info.uploader || "?")[0] || "?")}</div>
+        <div class="avatar">${escapeHtml((channelName || "?")[0] || "?")}</div>
         <div>
           <div class="name">${channelLink}</div>
           ${info.channel_follower_count ? `<div class="subs">${info.channel_follower_count.toLocaleString("ja-JP")} 人の登録者</div>` : ""}
         </div>
+        ${subscribeButtonHTML(info.channel_id, channelName, info.thumbnail)}
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">${stats.join("")}</div>
     </div>
@@ -271,7 +394,6 @@ function renderPlayer(wrap, stream, info) {
     hls.loadSource(hlsUrl);
     hls.attachMedia(videoEl);
   } else {
-    // hls.jsが無い/未対応環境向けの最終手段としてリンクだけ出しておく
     wrap.innerHTML = `<div class="player-fallback">このブラウザではHLS再生に対応していません。<br><a href="${escapeHtml(hlsUrl)}">直接リンクを開く</a></div>`;
   }
 }
@@ -282,14 +404,15 @@ async function initChannelPage(channelId) {
   try {
     const data = await fetchJSON(`/proxy/channel/${encodeURIComponent(channelId)}?limit=30`);
     header.innerHTML = `
-      <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px;">
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; flex-wrap:wrap;">
         <div class="avatar" style="width:64px;height:64px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:24px;">
           ${escapeHtml((data.channel || "?")[0] || "?")}
         </div>
-        <div>
+        <div style="flex:1;">
           <div style="font-size:20px; font-weight:600;">${escapeHtml(data.channel || "")}</div>
           ${data.channel_follower_count ? `<div style="color:var(--text-secondary); font-size:13px;">${data.channel_follower_count.toLocaleString("ja-JP")} 人の登録者</div>` : ""}
         </div>
+        ${subscribeButtonHTML(channelId, data.channel, null)}
       </div>
       ${data.description ? `<div class="description-box" style="margin-bottom:24px;">${escapeHtml(data.description)}</div>` : ""}`;
 
@@ -322,6 +445,80 @@ async function initPlaylistPage(playlistId) {
   }
 }
 
+function initSubscriptionsPage() {
+  const box = document.getElementById("subscriptionsList");
+  const subs = getJSON(SUBS_KEY, []);
+  if (!subs.length) {
+    box.innerHTML = '<div class="empty-state">登録チャンネルはありません</div>';
+    return;
+  }
+  box.innerHTML = subs.map((s) => `
+    <a class="sub-row" href="/channel/${encodeURIComponent(s.channel_id)}">
+      <div class="avatar" style="width:48px;height:48px;">
+        ${s.thumbnail ? `<img src="${escapeHtml(s.thumbnail)}" alt="">` : escapeHtml((s.channel || "?")[0] || "?")}
+      </div>
+      <div class="title">${escapeHtml(s.channel || "")}</div>
+    </a>`).join("");
+}
+
+function initHistoryPage() {
+  const grid = document.getElementById("historyGrid");
+
+  function render() {
+    const hist = getJSON(HISTORY_KEY, []);
+    grid.innerHTML = hist.length
+      ? hist.map((h) => videoCardHTML(
+          { video_id: h.video_id, title: h.title, channel: h.channel, thumbnail: h.thumbnail, duration: h.duration },
+          `/watch?v=${encodeURIComponent(h.video_id)}`
+        )).join("")
+      : '<div class="empty-state">視聴履歴はありません</div>';
+  }
+  render();
+
+  const clearBtn = document.getElementById("clearHistoryBtn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      setJSON(HISTORY_KEY, []);
+      render();
+    });
+  }
+}
+
+function initSettingsPage() {
+  const input = document.getElementById("apiBaseInput");
+  const status = document.getElementById("apiBaseStatus");
+  const saveBtn = document.getElementById("saveApiBase");
+  const resetBtn = document.getElementById("resetApiBase");
+  const clearBtn = document.getElementById("clearLocalData");
+  const clearStatus = document.getElementById("clearStatus");
+
+  input.value = localStorage.getItem(API_BASE_KEY) || "";
+
+  saveBtn.addEventListener("click", () => {
+    const val = input.value.trim();
+    if (val) {
+      localStorage.setItem(API_BASE_KEY, val);
+      status.textContent = "保存しました。ページを再読み込みすると反映されます。";
+    } else {
+      localStorage.removeItem(API_BASE_KEY);
+      status.textContent = "既定値を使うようにしました。";
+    }
+  });
+
+  resetBtn.addEventListener("click", () => {
+    localStorage.removeItem(API_BASE_KEY);
+    input.value = "";
+    status.textContent = "既定値に戻しました。";
+  });
+
+  clearBtn.addEventListener("click", () => {
+    localStorage.removeItem(SUBS_KEY);
+    localStorage.removeItem(LIKES_KEY);
+    localStorage.removeItem(HISTORY_KEY);
+    clearStatus.textContent = "削除しました。";
+  });
+}
+
 // ---------- サイドバー開閉(モバイル幅) ----------
 
 function toggleSidebar() {
@@ -332,11 +529,15 @@ function toggleSidebar() {
 // ---------- ページごとの振り分け ----------
 
 document.addEventListener("DOMContentLoaded", () => {
-  const page = document.body.dataset.page;
   const ds = document.body.dataset;
+  const page = ds.page;
 
-  if (page === "results") initResultsPage(ds.query || "");
+  if (page === "index") initIndexPage();
+  else if (page === "results") initResultsPage(ds.query || "");
   else if (page === "watch") initWatchPage(ds.videoId);
   else if (page === "channel") initChannelPage(ds.channelId);
   else if (page === "playlist") initPlaylistPage(ds.playlistId);
+  else if (page === "subscriptions") initSubscriptionsPage();
+  else if (page === "history") initHistoryPage();
+  else if (page === "settings") initSettingsPage();
 });
