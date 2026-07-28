@@ -219,19 +219,22 @@ function skeletonCardHTML() {
 // ---------- カードのHTML(実データ) ----------
 
 function videoCardHTML(e, watchHref) {
-  const dur = e.duration ? `<span class="duration">${escapeHtml(formatDuration(e.duration))}</span>` : "";
+  const isLive = e.live_status === "is_live";
+  const badge = isLive
+    ? `<span class="duration live-badge">LIVE</span>`
+    : (e.duration ? `<span class="duration">${escapeHtml(formatDuration(e.duration))}</span>` : "");
   const views = e.view_count ? formatViews(e.view_count) : (e.view_count_text || "");
   return `
     <a class="card" href="${watchHref}">
       <div class="thumb-wrap">
         ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}
-        ${dur}
+        ${badge}
       </div>
       <div class="meta">
         <div class="avatar">${escapeHtml((e.channel || "?")[0] || "?")}</div>
         <div>
           <div class="title">${escapeHtml(e.title)}</div>
-          <div class="sub">${escapeHtml(e.channel || "")}${views ? " &middot; " + escapeHtml(views) : ""}</div>
+          <div class="sub">${escapeHtml(e.channel || "")}${isLive ? "" : (views ? " &middot; " + escapeHtml(views) : "")}</div>
         </div>
       </div>
     </a>`;
@@ -304,6 +307,8 @@ async function initWatchPage(videoId) {
   const relatedBox = document.getElementById("relatedList");
   const commentsBox = document.getElementById("commentsList");
   const playerWrap = document.getElementById("playerWrap");
+  const liveChatPanel = document.getElementById("liveChatPanel");
+  const liveChatBox = document.getElementById("liveChatBox");
 
   const infoPromise = fetchJSON(`/proxy/info/${encodeURIComponent(videoId)}`);
   const streamPromise = fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`);
@@ -321,6 +326,23 @@ async function initWatchPage(videoId) {
       thumbnail: info.thumbnail || "",
       duration: info.duration || null,
     });
+
+    if (info.is_live && liveChatPanel && liveChatBox) {
+      liveChatPanel.style.display = "block";
+      liveChatBox.innerHTML = '<div class="chat-note">チャットを読み込み中...</div>';
+      fetchJSON(`/proxy/livechat/${encodeURIComponent(videoId)}?limit=200`)
+        .then((data) => {
+          const messages = data.messages || [];
+          liveChatBox.innerHTML =
+            '<div class="chat-note">試験的な機能です。配信全体のチャット履歴ではなく、取得できた範囲のみ表示しています。</div>' +
+            (messages.length
+              ? messages.map((m) => `<div class="chat-row"><span class="author">${escapeHtml(m.author || "")}</span>${escapeHtml(m.text || "")}</div>`).join("")
+              : '<div class="chat-note">チャットを取得できませんでした。</div>');
+        })
+        .catch(() => {
+          liveChatPanel.style.display = "none";
+        });
+    }
   } catch (e) {
     showError(infoBox, e.message);
     playerWrap.innerHTML = `<div class="player-fallback">${escapeHtml(e.message)}</div>`;
@@ -396,26 +418,43 @@ function renderVideoInfo(box, info, videoId) {
   }
 }
 
+function mediaProxyUrl(videoId, formatId) {
+  // ブラウザは常にこのフロントエンド自身の /media/ を叩く(バックエンドのURLは見せない)。
+  // ytdlp_apiが解決した直リンクをブラウザから直接叩くと、IPバインドの都合で
+  // 再生できないことがあるための対策。
+  return `/media/${encodeURIComponent(videoId)}?format_id=${encodeURIComponent(formatId)}`;
+}
+
 function renderPlayer(wrap, stream, info) {
+  const videoId = stream.video_id;
   const streams = stream.streams || [];
   const combined = streams.filter((s) => s.url && s.vcodec && s.vcodec !== "none" && s.acodec && s.acodec !== "none");
+  const videoOnly = streams.filter((s) => s.url && s.vcodec && s.vcodec !== "none" && (!s.acodec || s.acodec === "none"));
+  const audioOnly = streams.filter((s) => s.url && (!s.vcodec || s.vcodec === "none") && s.acodec && s.acodec !== "none");
   const hlsUrl = stream.hls_url || null;
 
-  // 解像度が同じフォーマットが複数あれば、ビットレートが高い方を代表として残す
+  // 解像度ごとに、映像+音声一体のフォーマットを優先しつつ画質の選択肢を作る。
+  // 一体フォーマットが無い解像度は、映像onlyを選ばせて裏で音声onlyを同期再生する。
   const byHeight = new Map();
   combined.forEach((s) => {
     const h = s.height || 0;
     const existing = byHeight.get(h);
-    if (!existing || (s.tbr || 0) > (existing.tbr || 0)) byHeight.set(h, s);
+    if (!existing || (s.tbr || 0) > (existing.tbr || 0)) byHeight.set(h, { ...s, needsAudioSync: false });
+  });
+  videoOnly.forEach((s) => {
+    const h = s.height || 0;
+    if (!byHeight.has(h)) byHeight.set(h, { ...s, needsAudioSync: true });
   });
   const qualities = Array.from(byHeight.values()).sort((a, b) => (b.height || 0) - (a.height || 0));
+
+  const bestAudio = audioOnly.slice().sort((a, b) => (b.abr || b.tbr || 0) - (a.abr || a.tbr || 0))[0] || null;
 
   if (!qualities.length && !hlsUrl) {
     wrap.innerHTML = '<div class="player-fallback">再生可能なフォーマットが見つかりませんでした。<br>(映像+音声が一体になったフォーマットが無い動画の可能性があります)</div>';
     return;
   }
 
-  // 既定は itag 18 (360p)。無ければ一番高画質のものにフォールバック。
+  // 既定は itag 18 (360p、映像+音声一体)。無ければ一番高画質のものにフォールバック。
   const defaultQuality = qualities.find((q) => q.format_id === "18") || qualities[0] || null;
   const posterAttr = info.thumbnail ? ` poster="${escapeHtml(info.thumbnail)}"` : "";
 
@@ -447,38 +486,85 @@ function renderPlayer(wrap, stream, info) {
   const videoEl = document.getElementById("player");
   const playerRoot = document.getElementById("customPlayer");
 
-  function loadSource(url, resumePlayback) {
-    const wasPlaying = resumePlayback && !videoEl.paused;
-    const resumeTime = resumePlayback ? videoEl.currentTime : 0;
-    videoEl.src = url;
-    if (resumePlayback) {
-      const onMeta = () => {
-        videoEl.currentTime = resumeTime;
-        if (wasPlaying) videoEl.play().catch(() => {});
-        videoEl.removeEventListener("loadedmetadata", onMeta);
-      };
-      videoEl.addEventListener("loadedmetadata", onMeta);
+  // 映像onlyフォーマット選択時に使う、裏で流す音声用のaudio要素の参照。
+  // wireCustomPlayerControls側の音量/ミュート操作からも触れるようオブジェクトで共有する。
+  const syncState = { audioEl: null, intervalId: null };
+
+  function stopAudioSync() {
+    if (syncState.intervalId) {
+      clearInterval(syncState.intervalId);
+      syncState.intervalId = null;
+    }
+    if (syncState.audioEl) {
+      syncState.audioEl.pause();
+      syncState.audioEl.remove();
+      syncState.audioEl = null;
     }
   }
 
+  function startAudioSync(audioFormatId) {
+    stopAudioSync();
+    if (!bestAudio) return;
+    const audioEl = document.createElement("audio");
+    audioEl.src = mediaProxyUrl(videoId, audioFormatId);
+    audioEl.preload = "auto";
+    audioEl.style.display = "none";
+    audioEl.volume = videoEl.volume;
+    audioEl.muted = videoEl.muted;
+    playerRoot.appendChild(audioEl);
+    syncState.audioEl = audioEl;
+
+    const resync = () => {
+      if (!syncState.audioEl) return;
+      const drift = videoEl.currentTime - syncState.audioEl.currentTime;
+      if (Math.abs(drift) > 0.3) {
+        syncState.audioEl.currentTime = videoEl.currentTime;
+      }
+    };
+    syncState.intervalId = setInterval(resync, 1000);
+  }
+
+  function loadSource(quality, resumePlayback) {
+    stopAudioSync();
+    const wasPlaying = resumePlayback && !videoEl.paused;
+    const resumeTime = resumePlayback ? videoEl.currentTime : 0;
+    videoEl.src = mediaProxyUrl(videoId, quality.format_id);
+
+    if (quality.needsAudioSync && bestAudio) {
+      startAudioSync(bestAudio.format_id);
+    }
+
+    const onMeta = () => {
+      if (resumePlayback) videoEl.currentTime = resumeTime;
+      if (wasPlaying) {
+        videoEl.play().catch(() => {});
+        if (syncState.audioEl) syncState.audioEl.play().catch(() => {});
+      }
+      videoEl.removeEventListener("loadedmetadata", onMeta);
+    };
+    videoEl.addEventListener("loadedmetadata", onMeta);
+  }
+
   if (defaultQuality) {
-    loadSource(defaultQuality.url, false);
+    loadSource(defaultQuality, false);
   } else if (hlsUrl) {
     attachHlsSource(videoEl, hlsUrl);
   }
 
-  wireCustomPlayerControls(videoEl, playerRoot);
+  wireCustomPlayerControls(videoEl, playerRoot, syncState);
 
   const qualitySelect = document.getElementById("qualitySelect");
   if (qualitySelect) {
     qualitySelect.addEventListener("change", () => {
       const chosen = qualities.find((q) => q.format_id === qualitySelect.value);
-      if (chosen) loadSource(chosen.url, true);
+      if (chosen) loadSource(chosen, true);
     });
   }
 }
 
 function attachHlsSource(videoEl, hlsUrl) {
+  // ライブ配信のHLSは(今のところ)プロキシを通していないので、CDNへの直接アクセスになる。
+  // VOD(通常動画)は上のmediaProxyUrl経由なのでこの分岐に来ない。
   if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
     videoEl.src = hlsUrl;
     return;
@@ -500,7 +586,7 @@ function formatPlayerTime(sec) {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-function wireCustomPlayerControls(videoEl, playerRoot) {
+function wireCustomPlayerControls(videoEl, playerRoot, syncState) {
   const playBtn = playerRoot.querySelector("#playPauseBtn");
   const seekBar = playerRoot.querySelector("#seekBar");
   const curTimeEl = playerRoot.querySelector("#curTime");
@@ -520,8 +606,13 @@ function wireCustomPlayerControls(videoEl, playerRoot) {
   updateSeekBarFill(0);
 
   function togglePlay() {
-    if (videoEl.paused) videoEl.play().catch(() => {});
-    else videoEl.pause();
+    if (videoEl.paused) {
+      videoEl.play().catch(() => {});
+      if (syncState.audioEl) syncState.audioEl.play().catch(() => {});
+    } else {
+      videoEl.pause();
+      if (syncState.audioEl) syncState.audioEl.pause();
+    }
   }
 
   playBtn.addEventListener("click", togglePlay);
@@ -550,7 +641,9 @@ function wireCustomPlayerControls(videoEl, playerRoot) {
   });
   seekBar.addEventListener("change", () => {
     if (videoEl.duration) {
-      videoEl.currentTime = (seekBar.value / 100) * videoEl.duration;
+      const t = (seekBar.value / 100) * videoEl.duration;
+      videoEl.currentTime = t;
+      if (syncState.audioEl) syncState.audioEl.currentTime = t;
     }
     seeking = false;
   });
@@ -562,6 +655,10 @@ function wireCustomPlayerControls(videoEl, playerRoot) {
   volumeBar.addEventListener("input", () => {
     videoEl.volume = volumeBar.value / 100;
     videoEl.muted = videoEl.volume === 0;
+    if (syncState.audioEl) {
+      syncState.audioEl.volume = videoEl.volume;
+      syncState.audioEl.muted = videoEl.muted;
+    }
     updateVolumeIcon();
   });
   muteBtn.addEventListener("click", () => {
@@ -569,6 +666,10 @@ function wireCustomPlayerControls(videoEl, playerRoot) {
     if (!videoEl.muted && videoEl.volume === 0) {
       videoEl.volume = 1;
       volumeBar.value = 100;
+    }
+    if (syncState.audioEl) {
+      syncState.audioEl.muted = videoEl.muted;
+      syncState.audioEl.volume = videoEl.volume;
     }
     updateVolumeIcon();
   });
