@@ -17,12 +17,12 @@ import os
 import re
 
 import requests
-from flask import Flask, render_template, request, redirect, url_for, abort, send_from_directory, jsonify
+from flask import Flask, render_template, request, redirect, url_for, abort, send_from_directory, jsonify, Response
 from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://disc-you-statements-developed.trycloudflare.com").rstrip("/")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "http://ytdlp56.duckdns.org:5000").rstrip("/")
 SITE_NAME = os.environ.get("SITE_NAME", "Tubely")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
@@ -198,6 +198,12 @@ def proxy_comments(video_id):
     return _proxy(f"/api/comments/{video_id}", limit=limit)
 
 
+@app.route("/proxy/livechat/<video_id>")
+def proxy_livechat(video_id):
+    limit = request.args.get("limit", "200")
+    return _proxy(f"/api/livechat/{video_id}", limit=limit)
+
+
 @app.route("/proxy/channel/<channel_id>")
 def proxy_channel(channel_id):
     limit = request.args.get("limit", "30")
@@ -208,6 +214,60 @@ def proxy_channel(channel_id):
 def proxy_playlist(playlist_id):
     limit = request.args.get("limit", "100")
     return _proxy(f"/api/playlist/{playlist_id}", limit=limit)
+
+
+# ---------- メディア中継 (実際の動画/音声バイト列をそのまま流す) ----------
+
+MEDIA_TIMEOUT = 30
+
+
+@app.route("/media/<video_id>")
+def media_proxy(video_id):
+    """
+    <video src="..."> / <audio src="..."> が直接叩くエンドポイント。
+    ytdlp_api の /api/proxy-stream をそのまま中継するだけ。二段プロキシになるが、
+    こうしておくとブラウザからは常にこのフロントエンドのドメインしか見えないので、
+    設定画面で隠しているAPIサーバーのURLがバレることもない。
+    Rangeヘッダもそのまま転送するのでシークも普通に効く。
+    """
+    format_id = request.args.get("format_id", "18")
+    api_base = _resolve_api_base()
+    upstream_url = f"{api_base}/api/proxy-stream/{video_id}"
+
+    range_header = request.headers.get("Range")
+    fwd_headers = {"Range": range_header} if range_header else {}
+
+    try:
+        upstream = requests.get(
+            upstream_url,
+            params={"format_id": format_id},
+            headers=fwd_headers,
+            stream=True,
+            timeout=MEDIA_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        abort(502, description=f"upstream fetch failed: {e}")
+
+    if upstream.status_code >= 400:
+        upstream.close()
+        abort(502, description=f"upstream returned {upstream.status_code}")
+
+    passthrough_headers = {}
+    for h in ("Content-Range", "Content-Length", "Accept-Ranges", "Content-Type"):
+        if h in upstream.headers:
+            passthrough_headers[h] = upstream.headers[h]
+    passthrough_headers.setdefault("Accept-Ranges", "bytes")
+    passthrough_headers.setdefault("Content-Type", "video/mp4")
+
+    def gen():
+        try:
+            for chunk in upstream.iter_content(65536):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream.close()
+
+    return Response(gen(), status=upstream.status_code, headers=passthrough_headers)
 
 
 if __name__ == "__main__":
