@@ -185,6 +185,12 @@ main.content {
   nav.sidebar .hint { display: none; }
 }
 
+/* タブレット/デスクトップ幅: ハンバーガーで明示的に閉じた時は画面幅を問わず隠す
+   (モバイル幅は下の .open の仕組みで別管理なので、ここでは701px以上だけに絞る) */
+@media (min-width: 701px) {
+  nav.sidebar.collapsed { display: none; }
+}
+
 /* モバイル幅: サイドバーは既定で隠し、ハンバーガーで開閉 */
 @media (max-width: 700px) {
   nav.sidebar {
@@ -445,6 +451,8 @@ main.content {
   font-size: 18px;
   font-weight: 600;
   margin: 16px 0 8px;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .video-owner-row {

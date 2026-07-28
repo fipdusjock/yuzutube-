@@ -34,6 +34,14 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
+function truncateText(str, maxLen) {
+  // 長いタイトル(スペースの無い長い文字列など)がレイアウトを壊すことがあるので、
+  // CSSのline-clampだけに頼らず、JS側でも一定文字数を超えたら...で切る。
+  if (!str) return "";
+  const s = String(str);
+  return s.length > maxLen ? s.slice(0, maxLen).trimEnd() + "..." : s;
+}
+
 function formatDuration(seconds) {
   if (!seconds) return "";
   seconds = Math.floor(seconds);
@@ -233,7 +241,7 @@ function videoCardHTML(e, watchHref) {
       <div class="meta">
         <div class="avatar">${escapeHtml((e.channel || "?")[0] || "?")}</div>
         <div>
-          <div class="title">${escapeHtml(e.title)}</div>
+          <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>
           <div class="sub">${escapeHtml(e.channel || "")}${isLive ? "" : (views ? " &middot; " + escapeHtml(views) : "")}</div>
         </div>
       </div>
@@ -248,7 +256,7 @@ function relatedCardHTML(e) {
         ${e.length_text ? `<span class="duration">${escapeHtml(e.length_text)}</span>` : ""}
       </div>
       <div>
-        <div class="title">${escapeHtml(e.title)}</div>
+        <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>
         <div class="sub">${escapeHtml(e.channel || "")}${e.view_count_text ? "<br>" + escapeHtml(e.view_count_text) : ""}</div>
       </div>
     </a>`;
@@ -387,7 +395,7 @@ function renderVideoInfo(box, info, videoId) {
     .join("");
 
   box.innerHTML = `
-    <div class="video-title">${escapeHtml(info.title || "")}</div>
+    <div class="video-title">${escapeHtml(truncateText(info.title || "", 150))}</div>
     <div class="video-owner-row">
       <div class="video-owner">
         <div class="avatar">${ownerAvatarHTML}</div>
@@ -502,17 +510,33 @@ function renderPlayer(wrap, stream, info) {
     }
   }
 
-  function startAudioSync(audioFormatId) {
+  function attachWithFallback(el, directUrl, formatId) {
+    // 直リンク(CDNの実URL)をまず試す。プロキシを経由しない分、二段中継の帯域
+    // ボトルネックが無くて速い。IPバインド等で直リンクが弾かれる場合だけ、
+    // errorイベントを合図にプロキシ経由(/media/...)へ自動的に切り替える。
+    const proxyUrl = mediaProxyUrl(videoId, formatId);
+    let fellBack = false;
+    const onError = () => {
+      if (fellBack) return;
+      fellBack = true;
+      el.removeEventListener("error", onError);
+      el.src = proxyUrl;
+    };
+    el.addEventListener("error", onError);
+    el.src = directUrl || proxyUrl;
+  }
+
+  function startAudioSync(audioQuality) {
     stopAudioSync();
-    if (!bestAudio) return;
+    if (!audioQuality) return;
     const audioEl = document.createElement("audio");
-    audioEl.src = mediaProxyUrl(videoId, audioFormatId);
     audioEl.preload = "auto";
     audioEl.style.display = "none";
     audioEl.volume = videoEl.volume;
     audioEl.muted = videoEl.muted;
     playerRoot.appendChild(audioEl);
     syncState.audioEl = audioEl;
+    attachWithFallback(audioEl, audioQuality.url, audioQuality.format_id);
 
     const resync = () => {
       if (!syncState.audioEl) return;
@@ -528,10 +552,10 @@ function renderPlayer(wrap, stream, info) {
     stopAudioSync();
     const wasPlaying = resumePlayback && !videoEl.paused;
     const resumeTime = resumePlayback ? videoEl.currentTime : 0;
-    videoEl.src = mediaProxyUrl(videoId, quality.format_id);
+    attachWithFallback(videoEl, quality.url, quality.format_id);
 
     if (quality.needsAudioSync && bestAudio) {
-      startAudioSync(bestAudio.format_id);
+      startAudioSync(bestAudio);
     }
 
     const onMeta = () => {
@@ -736,7 +760,7 @@ async function initPlaylistPage(playlistId) {
   try {
     const data = await fetchJSON(`/proxy/playlist/${encodeURIComponent(playlistId)}?limit=100`);
     header.innerHTML = `
-      <h1 class="section-title">${escapeHtml(data.title || "")}</h1>
+      <h1 class="section-title">${escapeHtml(truncateText(data.title || "", 150))}</h1>
       <div style="color:var(--text-secondary); font-size:13px; margin-bottom:24px;">
         ${escapeHtml(data.uploader || "")}${data.entry_count_total ? " &middot; " + data.entry_count_total + " 本" : ""}
       </div>`;
@@ -828,7 +852,16 @@ function initSettingsPage() {
 
 function toggleSidebar() {
   const sidebar = document.querySelector("nav.sidebar");
-  if (sidebar) sidebar.classList.toggle("open");
+  if (!sidebar) return;
+  // モバイル幅は「隠れているのを.openで出す」、タブレット/デスクトップ幅は
+  // 「出ているのを.collapsedで隠す」という逆の既定状態なので、
+  // 今の画面幅に応じてどちらのクラスを操作するか切り替える。
+  const isMobile = window.matchMedia("(max-width: 700px)").matches;
+  if (isMobile) {
+    sidebar.classList.toggle("open");
+  } else {
+    sidebar.classList.toggle("collapsed");
+  }
 }
 
 // ---------- ページごとの振り分け ----------
