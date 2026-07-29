@@ -22,15 +22,19 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://conduct-affect-copyrighted-bench.trycloudflare.com").rstrip("/")
-SITE_NAME = os.environ.get("SITE_NAME", "Tubely")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://definitions-corporation-producer-com.trycloudflare.com").rstrip("/")
+# ytdlp_api側の YTDLP_API_SHARED_SECRET と同じ値を設定する。
+# これが一致しないとバックエンドがリクエストを弾くようになるので、
+# APIサーバーのURLを知っているだけの第三者が直接叩けないようにする仕組み。
+API_SHARED_SECRET = os.environ.get("YTDLP_API_SHARED_SECRET", "")
+SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
 # /proxy/* からバックエンドを叩く時のタイムアウト。ページ自体は即返すので、
 # ここは「フェッチが固まって延々ローディングのままにならない」程度の短さでいい。
-PROXY_TIMEOUT = 15
+PROXY_TIMEOUT = 60
 
-_URL_RE = re.compile(r"^https?://[^\s]+$")
+_URL_RE = re.compile(r"^https://[^\s]+$")  # 暗号化されていないhttp://は許可しない
 
 
 @app.context_processor
@@ -81,11 +85,19 @@ def results():
     return render_template("results.html", query=q)
 
 
+# YouTubeの動画IDは常に11文字。プレイリストID(PL.../UU.../LL...等)は
+# もっと長く、こういう接頭辞を持つ。v=にプレイリストIDを間違って渡してしまうケースへの対応。
+_PLAYLIST_ID_PREFIXES = ("PL", "UU", "LL", "WL", "FL", "RD", "OL")
+
+
 @app.route("/watch")
 def watch():
     video_id = request.args.get("v")
     if not video_id:
         abort(404)
+    if len(video_id) != 11 and video_id.startswith(_PLAYLIST_ID_PREFIXES):
+        # プレイリストIDが動画ID扱いで渡ってきたケース。プレイリストページへ誘導する。
+        return redirect(url_for("playlist", list=video_id))
     return render_template("watch.html", video_id=video_id)
 
 
@@ -124,6 +136,19 @@ def not_found(e):
 
 # ---------- プロキシAPI (ブラウザ側のfetchがここを叩く。JSON専用、常にJSONで返す) ----------
 
+def _client_ip():
+    """
+    Vercelは実際の訪問者IPを X-Forwarded-For ヘッダに入れて渡してくる
+    (Vercelのエッジ〜このFlaskアプリの間はVercelが面倒を見てくれている)。
+    このIPをバックエンド(ytdlp_api)側にも転送しておくことで、
+    バックエンド側で不正利用対策(レート制限等)をしたくなった時に使えるようにする。
+    """
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or ""
+
+
 def _resolve_api_base():
     """
     設定画面でユーザーが独自のAPI URLを指定していれば(?api_base=...)そちらを使う。
@@ -139,13 +164,16 @@ def _resolve_api_base():
 
 def _proxy(path, method="GET", **params):
     api_base = _resolve_api_base()
+    headers = {"X-Forwarded-For": _client_ip()}
+    if API_SHARED_SECRET:
+        headers["X-Internal-Secret"] = API_SHARED_SECRET
     try:
-        resp = requests.request(method, f"{api_base}{path}", params=params, timeout=PROXY_TIMEOUT)
+        resp = requests.request(method, f"{api_base}{path}", params=params, headers=headers, timeout=PROXY_TIMEOUT)
     except requests.RequestException as e:
+        app.logger.error("proxy request failed: %s%s -> %s", api_base, path, e)
         return jsonify({
             "error": True,
-            "message": f"APIサーバーに接続できませんでした ({api_base})。サーバーが起動しているか、"
-                       f"ポート開放/ドメイン設定が正しいか確認してください。詳細: {e}",
+            "message": "APIサーバーに接続できませんでした。しばらくしてからもう一度お試しください。",
         }), 502
 
     if resp.status_code >= 400:
@@ -153,12 +181,13 @@ def _proxy(path, method="GET", **params):
             detail = resp.json().get("detail")
         except ValueError:
             detail = resp.text[:200]
-        return jsonify({"error": True, "message": f"APIエラー (HTTP {resp.status_code}): {detail}"}), resp.status_code
+        app.logger.error("proxy upstream error %s: %s", resp.status_code, detail)
+        return jsonify({"error": True, "message": f"取得に失敗しました (HTTP {resp.status_code})"}), resp.status_code
 
     try:
         data = resp.json()
     except ValueError:
-        return jsonify({"error": True, "message": "APIの応答がJSONとして解釈できませんでした。"}), 502
+        return jsonify({"error": True, "message": "サーバーの応答を解釈できませんでした。"}), 502
 
     return jsonify(data)
 
@@ -204,6 +233,32 @@ def proxy_livechat(video_id):
     return _proxy(f"/api/livechat/{video_id}", limit=limit)
 
 
+@app.route("/proxy/subtitles/<video_id>")
+def proxy_subtitles(video_id):
+    """字幕はJSONではなくWebVTTのテキストなので、_proxy()を使わず専用処理にしている。"""
+    lang = request.args.get("lang", "ja")
+    auto = request.args.get("auto", "0")
+    api_base = _resolve_api_base()
+    headers = {"X-Forwarded-For": _client_ip()}
+    if API_SHARED_SECRET:
+        headers["X-Internal-Secret"] = API_SHARED_SECRET
+    try:
+        resp = requests.get(
+            f"{api_base}/api/subtitles/{video_id}",
+            params={"lang": lang, "auto": auto},
+            headers=headers,
+            timeout=PROXY_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        app.logger.error("subtitle proxy failed: %s -> %s", video_id, e)
+        abort(502, description="字幕の取得に失敗しました")
+
+    if resp.status_code >= 400:
+        abort(resp.status_code, description="字幕が見つかりませんでした")
+
+    return Response(resp.text, mimetype="text/vtt")
+
+
 @app.route("/proxy/cache-clear-all", methods=["DELETE"])
 def proxy_cache_clear_all():
     """サーバー側(ytdlp_api)のキャッシュを全部消す。間違ったデータがキャッシュされた時の
@@ -244,7 +299,11 @@ def media_proxy(video_id):
     upstream_url = f"{api_base}/api/proxy-stream/{video_id}"
 
     range_header = request.headers.get("Range")
-    fwd_headers = {"Range": range_header} if range_header else {}
+    fwd_headers = {"X-Forwarded-For": _client_ip()}
+    if API_SHARED_SECRET:
+        fwd_headers["X-Internal-Secret"] = API_SHARED_SECRET
+    if range_header:
+        fwd_headers["Range"] = range_header
 
     try:
         upstream = requests.get(
@@ -255,11 +314,13 @@ def media_proxy(video_id):
             timeout=MEDIA_TIMEOUT,
         )
     except requests.RequestException as e:
-        abort(502, description=f"upstream fetch failed: {e}")
+        app.logger.error("media proxy fetch failed: %s -> %s", video_id, e)
+        abort(502, description="動画データの取得に失敗しました")
 
     if upstream.status_code >= 400:
+        app.logger.error("media proxy upstream error: %s -> HTTP %s", video_id, upstream.status_code)
         upstream.close()
-        abort(502, description=f"upstream returned {upstream.status_code}")
+        abort(502, description="動画データの取得に失敗しました")
 
     passthrough_headers = {}
     for h in ("Content-Range", "Content-Length", "Accept-Ranges", "Content-Type"):
