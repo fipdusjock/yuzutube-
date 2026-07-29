@@ -202,8 +202,7 @@ function videoCardHTML(e, watchHref) {
 }
 
 function relatedCardHTML(e) {
-  const avatarHTML = e.channel_thumbnail ? `<img src="${escapeHtml(e.channel_thumbnail)}" alt="" loading="lazy">` : escapeHtml((e.channel || "?")[0] || "?");
-  return `\n    <a class="related-card" href="/watch?v=${encodeURIComponent(e.video_id)}">\n      <div class="thumb-wrap" style="width:168px;">\n        ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}\n        ${e.length_text ? `<span class="duration">${escapeHtml(e.length_text)}</span>` : ""}\n      </div>\n      <div style="display:flex; gap:8px; flex:1; min-width:0;">\n        <div class="avatar" style="width:28px;height:28px;flex-shrink:0;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:12px;">${avatarHTML}</div>\n        <div style="min-width:0;">\n          <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>\n          <div class="sub">${escapeHtml(e.channel || "")}${e.view_count_text ? "<br>" + escapeHtml(e.view_count_text) : ""}</div>\n        </div>\n      </div>\n    </a>`;
+  return `\n    <a class="related-card" href="/watch?v=${encodeURIComponent(e.video_id)}">\n      <div class="thumb-wrap" style="width:168px;">\n        ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}\n        ${e.length_text ? `<span class="duration">${escapeHtml(e.length_text)}</span>` : ""}\n      </div>\n      <div>\n        <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>\n        <div class="sub">${escapeHtml(e.channel || "")}${e.view_count_text ? "<br>" + escapeHtml(e.view_count_text) : ""}</div>\n      </div>\n    </a>`;
 }
 
 function commentRowHTML(c) {
@@ -237,52 +236,18 @@ function setupInfiniteScroll(sentinelParent, onIntersect) {
   return { sentinel, observer };
 }
 
-const SEARCH_FILTERS = [
-  { sp: "", label: "すべて" },
-  { sp: "EgIIAg==", label: "今日" },
-  { sp: "EgIIAw==", label: "今週" },
-  { sp: "EgIYAQ==", label: "4分未満" },
-  { sp: "EgIYAg==", label: "20分以上" },
-  { sp: "EgIQAg==", label: "チャンネル" },
-  { sp: "EgIQAw==", label: "再生リスト" },
-  { sp: "CAI=", label: "アップロード日順" },
-  { sp: "CAM=", label: "視聴回数順" },
-];
-
 async function initResultsPage(query) {
   const grid = document.getElementById("resultsGrid");
-  const filtersBox = document.getElementById("searchFilters");
   let nextContinuation = null;
-  let currentSp = "";
   let scrollHandle = null;
 
-  function renderFilters() {
-    if (!filtersBox) return;
-    filtersBox.innerHTML = SEARCH_FILTERS.map(f =>
-      `<button type="button" class="filter-pill ${f.sp === currentSp ? "active" : ""}" data-sp="${escapeHtml(f.sp)}">${escapeHtml(f.label)}</button>`
-    ).join("");
-    filtersBox.querySelectorAll(".filter-pill").forEach(btn => {
-      btn.addEventListener("click", () => {
-        if (btn.dataset.sp === currentSp) return;
-        currentSp = btn.dataset.sp;
-        renderFilters();
-        load(true);
-      });
-    });
-  }
-
-  async function load(reset) {
-    if (reset) {
-      grid.innerHTML = skeletonGridHTML(12);
-      nextContinuation = null;
-    }
+  async function load() {
     try {
-      const spParam = currentSp ? `&sp=${encodeURIComponent(currentSp)}` : "";
-      const data = await fetchJSON(`/proxy/search?q=${encodeURIComponent(query)}&limit=24${spParam}`);
+      const data = await fetchJSON(`/proxy/search?q=${encodeURIComponent(query)}&limit=24`);
       const entries = data.entries || [];
       nextContinuation = data.next_continuation || null;
       if (!entries.length) {
-        grid.innerHTML = '<div class="empty-state">見つかりませんでした。別のキーワードや条件で試してみてください。</div>';
+        grid.innerHTML = '<div class="empty-state">見つかりませんでした。別のキーワードで試してみてください。</div>';
         return;
       }
       grid.innerHTML = entries.map(e => videoCardHTML(e, `/watch?v=${encodeURIComponent(e.video_id)}`)).join("");
@@ -306,8 +271,7 @@ async function initResultsPage(query) {
     }
   }
 
-  renderFilters();
-  await load(true);
+  await load();
 }
 
 async function initWatchPage(videoId) {
