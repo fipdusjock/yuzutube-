@@ -1,4 +1,4 @@
-/* ---------- カラー変数: ライトがデフォルト、端末側がダークならそちらに切り替わる ---------- */
+
 
 :root {
   --bg: #ffffff;
@@ -62,8 +62,6 @@ button:active { transform: scale(0.97); }
 
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar { overflow: hidden; }
-
-/* ---------- header ---------- */
 
 header.top {
   position: sticky;
@@ -144,8 +142,6 @@ form.search button {
 form.search button:hover { background: var(--bg-hover); }
 form.search button .icon { width: 18px; height: 18px; }
 
-/* ---------- layout ---------- */
-
 .layout {
   display: flex;
   align-items: flex-start;
@@ -187,7 +183,6 @@ main.content {
   padding: 24px;
 }
 
-/* タブレット幅: サイドバーはアイコンだけの細い版にする */
 @media (max-width: 1100px) and (min-width: 701px) {
   :root { --sidebar-w: 72px; }
   nav.sidebar .item span.label { display: none; }
@@ -195,13 +190,10 @@ main.content {
   nav.sidebar .hint { display: none; }
 }
 
-/* タブレット/デスクトップ幅: ハンバーガーで明示的に閉じた時は画面幅を問わず隠す
-   (モバイル幅は下の .open の仕組みで別管理なので、ここでは701px以上だけに絞る) */
 @media (min-width: 701px) {
   nav.sidebar.collapsed { display: none; }
 }
 
-/* モバイル幅: サイドバーは既定で隠し、ハンバーガーで開閉 */
 @media (max-width: 700px) {
   nav.sidebar {
     display: none;
@@ -218,8 +210,6 @@ main.content {
   header.top { gap: 8px; padding: 0 8px; }
   .logo span.wordmark { display: none; }
 }
-
-/* ---------- video grid (results / channel / playlist) ---------- */
 
 .grid {
   display: grid;
@@ -289,8 +279,6 @@ main.content {
   margin: 0 0 16px;
 }
 
-/* ---------- skeleton loading ---------- */
-
 @keyframes skeleton-sweep {
   0% { background-position: -400px 0; }
   100% { background-position: 400px 0; }
@@ -311,8 +299,6 @@ main.content {
 
 .sk-card .sk-line { margin-top: 10px; }
 
-/* ---------- watch page ---------- */
-
 .watch-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 400px;
@@ -332,8 +318,6 @@ main.content {
   overflow: hidden;
 }
 .player-wrap video { width: 100%; height: 100%; }
-
-/* ---------- 自前の動画コントロール ---------- */
 
 .custom-player {
   position: relative;
@@ -561,8 +545,6 @@ main.content {
   margin-bottom: 8px;
 }
 
-/* 既定は折りたたみ状態。YouTubeと同じく本文3行+チャプター等は非表示にしておき、
-   「もっと見る」を押すと展開してチャプター等も見えるようにする。 */
 .description-box:not(.expanded) .description-text {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -592,8 +574,6 @@ main.content {
 }
 .chapters .chapter-row .ts { color: var(--accent); flex-shrink: 0; }
 
-/* ---------- ライブチャット(試験的機能) ---------- */
-
 .live-chat-box {
   background: var(--bg-elevated);
   border-radius: var(--radius);
@@ -619,8 +599,6 @@ main.content {
   padding: 6px 0;
 }
 
-/* related list */
-
 .related-list { display: flex; flex-direction: column; gap: 8px; }
 .related-card {
   display: flex;
@@ -641,8 +619,6 @@ main.content {
   overflow: hidden;
 }
 .related-card .sub { color: var(--text-secondary); font-size: 12px; margin-top: 4px; }
-
-/* comments */
 
 .comments-section { margin-top: 24px; }
 .comment-row {
@@ -671,8 +647,6 @@ main.content {
 }
 .comment-row .likes .icon { width: 14px; height: 14px; }
 
-/* ---------- チャンネルバナー ---------- */
-
 .channel-banner {
   width: 100%;
   aspect-ratio: 6.2 / 1;
@@ -686,8 +660,6 @@ main.content {
 @media (max-width: 700px) {
   .channel-banner { aspect-ratio: 3 / 1; }
 }
-
-/* ---------- チャンネルのタブ切り替え(動画/ライブ/再生リスト) ---------- */
 
 .channel-tabs {
   display: flex;
@@ -713,9 +685,28 @@ main.content {
   border-bottom-color: var(--text);
 }
 
-/* ---------- landing (index) ---------- */
-
-/* ---------- 設定ページ ---------- */
+.search-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.filter-pill {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-pill:hover { background: var(--bg-hover); }
+.filter-pill.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
 
 .settings-box {
   background: var(--bg-elevated);
@@ -770,8 +761,6 @@ main.content {
 }
 .secondary-btn:hover { background: var(--bg-hover); }
 
-/* ---------- 登録/高評価ボタン ---------- */
-
 .subscribe-btn {
   background: var(--text);
   color: var(--bg);
@@ -793,8 +782,6 @@ main.content {
 .like-btn.active { color: var(--accent); }
 .like-btn.active .icon svg { fill: var(--accent); }
 
-/* ---------- 登録チャンネル一覧 ---------- */
-
 .sub-row {
   display: flex;
   align-items: center;
@@ -814,8 +801,6 @@ main.content {
 .sub-row .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .sub-row .title { font-size: 14px; font-weight: 500; }
 
-/* ---------- ランディング(現状 index は トレンドグリッドのみなので未使用だが、
-   他ページで小さいフォームを置きたくなった時のため残してある) ---------- */
 .landing {
   max-width: 640px;
   margin: 8vh auto 0;
@@ -824,8 +809,6 @@ main.content {
 .landing .logo { justify-content: center; font-size: 28px; margin-bottom: 24px; }
 .landing p { color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; }
 .landing form.search { max-width: 100%; margin-bottom: 32px; }
-
-/* ---------- error / empty states ---------- */
 
 .empty-state {
   text-align: center;
