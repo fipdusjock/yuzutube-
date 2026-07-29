@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>アカウント作成 - {{ site_name }}</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/auth.css">
+</head>
+<body class="auth-body">
+  <div class="auth-bg">
+    <div class="auth-orb auth-orb-1"></div>
+    <div class="auth-orb auth-orb-2"></div>
+  </div>
+
+  <main class="auth-shell">
+    <a class="auth-brand" href="/login">
+      <span class="auth-brand-mark">柚</span>
+      <span class="auth-brand-name">{{ site_name }}</span>
+    </a>
+
+    <div class="auth-card">
+      <h1 class="auth-title">はじめまして</h1>
+      <p class="auth-sub">メールアドレスとパスワードでアカウントを作成します</p>
+
+      <form class="auth-form" id="signupForm" novalidate>
+        <label class="auth-field">
+          <span>メールアドレス</span>
+          <input type="email" name="email" id="email" autocomplete="email" required placeholder="you@example.com">
+        </label>
+        <label class="auth-field">
+          <span>パスワード</span>
+          <input type="password" name="password" id="password" autocomplete="new-password" required placeholder="8文字以上" minlength="8">
+        </label>
+
+        <div class="auth-error" id="authError" hidden></div>
+
+        <button type="submit" class="auth-submit" id="submitBtn">
+          <span class="auth-submit-label">アカウントを作成</span>
+        </button>
+      </form>
+
+      <div class="auth-switch">
+        既にアカウントをお持ちの方は <a href="/login">ログイン</a>
+      </div>
+    </div>
+  </main>
+
+<script>
+const form = document.getElementById("signupForm");
+const errorBox = document.getElementById("authError");
+const submitBtn = document.getElementById("submitBtn");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  errorBox.hidden = true;
+
+  const password = document.getElementById("password").value;
+  if (password.length < 8) {
+    errorBox.textContent = "パスワードは8文字以上にしてください";
+    errorBox.hidden = false;
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.classList.add("loading");
+
+  try {
+    const res = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: document.getElementById("email").value.trim(),
+        password,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.message || "登録に失敗しました");
+    }
+    window.location.href = "/";
+  } catch (err) {
+    errorBox.textContent = err.message;
+    errorBox.hidden = false;
+    submitBtn.disabled = false;
+    submitBtn.classList.remove("loading");
+  }
+});
+</script>
+</body>
+</html>
