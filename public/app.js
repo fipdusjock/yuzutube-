@@ -679,14 +679,17 @@ async function initChannelPage(channelId) {
   let scrollHandle = null;
   const PAGE_SIZE = 30;
 
-  function renderTabs() {
+  function renderTabs(availableTabs) {
     if (!tabsBox) return;
-    tabsBox.innerHTML = CHANNEL_TABS.map(t => `<button type="button" class="channel-tab-btn ${t.key === currentTab ? "active" : ""}" data-tab="${t.key}">${t.label}</button>`).join("");
+    const tabsToShow = availableTabs && availableTabs.length
+      ? CHANNEL_TABS.filter(t => availableTabs.includes(t.key))
+      : CHANNEL_TABS;
+    tabsBox.innerHTML = tabsToShow.map(t => `<button type="button" class="channel-tab-btn ${t.key === currentTab ? "active" : ""}" data-tab="${t.key}">${t.label}</button>`).join("");
     tabsBox.querySelectorAll(".channel-tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
         if (btn.dataset.tab === currentTab) return;
         currentTab = btn.dataset.tab;
-        renderTabs();
+        renderTabs(availableTabs);
         loadEntries(true);
       });
     });
@@ -726,7 +729,7 @@ async function initChannelPage(channelId) {
     const bannerHTML = bannerSrc ? `<div class="channel-banner"><img src="${escapeHtml(bannerSrc)}" alt=""></div>` : "";
     const avatarHTML = avatarSrc ? `<img src="${escapeHtml(avatarSrc)}" alt="">` : escapeHtml((data.channel || "?")[0] || "?");
     header.innerHTML = `\n      ${bannerHTML}\n      <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; flex-wrap:wrap;">\n        <div class="avatar" style="width:64px;height:64px;border-radius:50%;background:var(--bg-elevated);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:24px;">\n          ${avatarHTML}\n        </div>\n        <div style="flex:1;">\n          <div style="font-size:20px; font-weight:600;">${escapeHtml(data.channel || "")}</div>\n          ${data.channel_follower_count ? `<div style="color:var(--text-secondary); font-size:13px;">${formatCountJa(data.channel_follower_count)} 人の登録者</div>` : ""}\n        </div>\n        ${subscribeButtonHTML(channelId, data.channel, avatarSrc)}\n      </div>\n      ${data.description ? `<div class="description-box" style="margin-bottom:24px;">${escapeHtml(data.description)}</div>` : ""}`;
-    renderTabs();
+    renderTabs(data.available_tabs);
     const entries = data.entries || [];
     offset = entries.length;
     hasMore = entries.length >= PAGE_SIZE;
