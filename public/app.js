@@ -224,6 +224,10 @@ function skeletonCardHTML() {
     </div>`;
 }
 
+function skeletonGridHTML(count) {
+  return Array.from({ length: count }, skeletonCardHTML).join("");
+}
+
 // ---------- カードのHTML(実データ) ----------
 
 function videoCardHTML(e, watchHref) {
@@ -480,6 +484,7 @@ function renderPlayer(wrap, stream, info) {
   wrap.innerHTML = `
     <div class="custom-player" id="customPlayer">
       <video id="player" playsinline${posterAttr}></video>
+      <div class="player-spinner" id="playerSpinner"><div class="spinner-circle"></div></div>
       <div class="player-controls">
         <input type="range" class="seek-bar" id="seekBar" min="0" max="100" value="0" step="0.1">
         <div class="controls-row">
@@ -631,6 +636,18 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState) {
   const muteBtn = playerRoot.querySelector("#muteBtn");
   const volumeBar = playerRoot.querySelector("#volumeBar");
   const fullscreenBtn = playerRoot.querySelector("#fullscreenBtn");
+  const spinner = playerRoot.querySelector("#playerSpinner");
+
+  // YouTubeと同じく、読み込み中/バッファリング中はぐるぐる回るスピナーを出す。
+  // 再生できる状態になったら消す。
+  const showSpinner = () => spinner && spinner.classList.add("show");
+  const hideSpinner = () => spinner && spinner.classList.remove("show");
+  showSpinner();
+  videoEl.addEventListener("waiting", showSpinner);
+  videoEl.addEventListener("loadstart", showSpinner);
+  videoEl.addEventListener("canplay", hideSpinner);
+  videoEl.addEventListener("playing", hideSpinner);
+  videoEl.addEventListener("error", hideSpinner);
 
   let seeking = false;
 
@@ -728,9 +745,46 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState) {
   });
 }
 
+const CHANNEL_TABS = [
+  { key: "videos", label: "動画" },
+  { key: "streams", label: "ライブ" },
+  { key: "playlists", label: "再生リスト" },
+];
+
 async function initChannelPage(channelId) {
   const header = document.getElementById("channelHeader");
   const grid = document.getElementById("channelGrid");
+  const tabsBox = document.getElementById("channelTabs");
+  let currentTab = "videos";
+
+  function renderTabs() {
+    if (!tabsBox) return;
+    tabsBox.innerHTML = CHANNEL_TABS.map(
+      (t) => `<button type="button" class="channel-tab-btn ${t.key === currentTab ? "active" : ""}" data-tab="${t.key}">${t.label}</button>`
+    ).join("");
+    tabsBox.querySelectorAll(".channel-tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.tab === currentTab) return;
+        currentTab = btn.dataset.tab;
+        renderTabs();
+        loadEntries();
+      });
+    });
+  }
+
+  async function loadEntries() {
+    grid.innerHTML = skeletonGridHTML(12);
+    try {
+      const data = await fetchJSON(`/proxy/channel/${encodeURIComponent(channelId)}?tab=${encodeURIComponent(currentTab)}&limit=30`);
+      const entries = data.entries || [];
+      grid.innerHTML = entries.length
+        ? entries.map((e) => videoCardHTML(e, `/watch?v=${encodeURIComponent(e.video_id)}`)).join("")
+        : '<div class="empty-state">見つかりませんでした。</div>';
+    } catch (e) {
+      showError(grid.parentElement || grid, e.message);
+    }
+  }
+
   try {
     const data = await fetchJSON(`/proxy/channel/${encodeURIComponent(channelId)}?limit=30`);
     const avatarSrc = data.avatar_base64 || data.avatar;
@@ -757,6 +811,8 @@ async function initChannelPage(channelId) {
         ${subscribeButtonHTML(channelId, data.channel, avatarSrc)}
       </div>
       ${data.description ? `<div class="description-box" style="margin-bottom:24px;">${escapeHtml(data.description)}</div>` : ""}`;
+
+    renderTabs();
 
     const entries = data.entries || [];
     grid.innerHTML = entries.length
@@ -861,15 +917,23 @@ function initSettingsPage() {
   });
 
   const clearServerCacheBtn = document.getElementById("clearServerCache");
+  const serverCachePasswordInput = document.getElementById("serverCachePassword");
   const serverCacheStatus = document.getElementById("serverCacheStatus");
   if (clearServerCacheBtn) {
     clearServerCacheBtn.addEventListener("click", async () => {
+      const password = (serverCachePasswordInput && serverCachePasswordInput.value) || "";
+      if (!password) {
+        serverCacheStatus.textContent = "管理者パスワードを入力してください。";
+        return;
+      }
       clearServerCacheBtn.disabled = true;
       serverCacheStatus.textContent = "削除中...";
       try {
+        const params = new URLSearchParams();
+        params.set("password", password);
         const extra = apiBaseQueryParam();
-        const url = "/proxy/cache-clear-all" + (extra ? `?${extra}` : "");
-        const res = await fetch(url, { method: "DELETE" });
+        if (extra) new URLSearchParams(extra).forEach((v, k) => params.set(k, v));
+        const res = await fetch(`/proxy/cache-clear-all?${params.toString()}`, { method: "DELETE" });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.message || `HTTPエラー (${res.status})`);
         serverCacheStatus.textContent =
