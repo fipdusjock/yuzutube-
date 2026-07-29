@@ -18,6 +18,7 @@ const ICONS = {
   volume: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M17 8a5 5 0 0 1 0 8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M19.5 5.5a9 9 0 0 1 0 13"/></svg>',
   volumeMute: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16 9l5 6M21 9l-5 6"/></svg>',
   fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0-4-4m4 4 4-4"/><path d="M4 19h16"/></svg>',
 };
 
 function icon(name) {
@@ -338,6 +339,7 @@ async function initWatchPage(videoId) {
       video_id: videoId,
       title: info.title || "",
       channel: info.channel || info.uploader || "",
+      channel_thumbnail: info.channel_avatar_base64 || info.channel_avatar || "",
       thumbnail: info.thumbnail || "",
       duration: info.duration || null,
     });
@@ -403,17 +405,17 @@ function renderVideoInfo(box, info, videoId) {
 
   box.innerHTML = `
     <div class="video-title">${escapeHtml(truncateText(info.title || "", 150))}</div>
-    <div class="video-owner-row">
+    <div class="video-meta-row">
       <div class="video-owner">
         <div class="avatar">${ownerAvatarHTML}</div>
-        <div>
+        <div class="video-owner-info">
           <div class="name">${channelLink}</div>
           ${info.channel_follower_count ? `<div class="subs">${formatCountJa(info.channel_follower_count)} 人の登録者</div>` : ""}
         </div>
-        ${subscribeButtonHTML(info.channel_id, channelName, ownerAvatarSrc)}
       </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">${stats.join("")}</div>
+      ${subscribeButtonHTML(info.channel_id, channelName, ownerAvatarSrc)}
     </div>
+    <div class="video-stats-row">${stats.join("")}</div>
     <div class="description-box" id="descriptionBox">
       <div class="description-inner">
         ${info.upload_date ? `<div class="top-line">${escapeHtml(formatUploadDate(info.upload_date))}</div>` : ""}
@@ -464,6 +466,12 @@ function renderPlayer(wrap, stream, info) {
 
   const bestAudio = audioOnly.slice().sort((a, b) => (b.abr || b.tbr || 0) - (a.abr || a.tbr || 0))[0] || null;
 
+  // 字幕の選択肢(手動字幕を優先、無ければ自動生成字幕も候補に出す)
+  const subtitleOptions = [
+    ...(info.subtitles_languages || []).map((l) => ({ lang: l, auto: false, label: l })),
+    ...(info.automatic_captions_languages || []).map((l) => ({ lang: l, auto: true, label: `${l} (自動生成)` })),
+  ];
+
   if (!qualities.length && !hlsUrl) {
     wrap.innerHTML = '<div class="player-fallback">再生可能なフォーマットが見つかりませんでした。<br>(映像+音声が一体になったフォーマットが無い動画の可能性があります)</div>';
     return;
@@ -493,7 +501,9 @@ function renderPlayer(wrap, stream, info) {
           <div class="spacer"></div>
           <button class="ctrl-btn" id="muteBtn" aria-label="ミュート切替">${icon("volume")}</button>
           <input type="range" class="volume-bar" id="volumeBar" min="0" max="100" value="100" aria-label="音量">
+          ${subtitleOptions.length ? `<select class="quality-select" id="subtitleSelect" aria-label="字幕"><option value="">字幕オフ</option>${subtitleOptions.map((s, i) => `<option value="${i}">${escapeHtml(s.label)}</option>`).join("")}</select>` : ""}
           ${qualities.length >= 1 ? `<select class="quality-select" id="qualitySelect" aria-label="画質">${qualityOptionsHTML}</select>` : ""}
+          <button class="ctrl-btn" id="downloadBtn" aria-label="ダウンロード">${icon("download")}</button>
           <button class="ctrl-btn" id="fullscreenBtn" aria-label="全画面表示">${icon("fullscreen")}</button>
         </div>
       </div>
@@ -600,6 +610,59 @@ function renderPlayer(wrap, stream, info) {
     qualitySelect.addEventListener("change", () => {
       const chosen = qualities.find((q) => q.format_id === qualitySelect.value);
       if (chosen) loadSource(chosen, true);
+    });
+  }
+
+  // ---------- 字幕(オン/オフ切り替え) ----------
+  const subtitleSelect = document.getElementById("subtitleSelect");
+  let currentTrackEl = null;
+  if (subtitleSelect) {
+    subtitleSelect.addEventListener("change", async () => {
+      if (currentTrackEl) {
+        currentTrackEl.remove();
+        currentTrackEl = null;
+      }
+      const idx = subtitleSelect.value;
+      if (idx === "") return; // 「字幕オフ」
+      const chosen = subtitleOptions[Number(idx)];
+      if (!chosen) return;
+      try {
+        const res = await fetch(`/proxy/subtitles/${encodeURIComponent(videoId)}?lang=${encodeURIComponent(chosen.lang)}&auto=${chosen.auto ? 1 : 0}`);
+        if (!res.ok) throw new Error("字幕の取得に失敗しました");
+        const vttText = await res.text();
+        const blobUrl = URL.createObjectURL(new Blob([vttText], { type: "text/vtt" }));
+        const track = document.createElement("track");
+        track.kind = "subtitles";
+        track.label = chosen.label;
+        track.srclang = chosen.lang;
+        track.src = blobUrl;
+        track.default = true;
+        videoEl.appendChild(track);
+        currentTrackEl = track;
+        // trackを追加しただけだと表示されないブラウザがあるため、明示的にshowingにする
+        setTimeout(() => {
+          if (videoEl.textTracks && videoEl.textTracks.length) {
+            videoEl.textTracks[videoEl.textTracks.length - 1].mode = "showing";
+          }
+        }, 100);
+      } catch (e) {
+        subtitleSelect.value = "";
+      }
+    });
+  }
+
+  // ---------- ダウンロード ----------
+  const downloadBtn = document.getElementById("downloadBtn");
+  if (downloadBtn) {
+    downloadBtn.addEventListener("click", () => {
+      const currentFormatId = qualitySelect ? qualitySelect.value : (defaultQuality && defaultQuality.format_id);
+      if (!currentFormatId) return;
+      const a = document.createElement("a");
+      a.href = `/media/${encodeURIComponent(videoId)}?format_id=${encodeURIComponent(currentFormatId)}&download=1`;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     });
   }
 }
@@ -866,7 +929,7 @@ function initHistoryPage() {
     const hist = getJSON(HISTORY_KEY, []);
     grid.innerHTML = hist.length
       ? hist.map((h) => videoCardHTML(
-          { video_id: h.video_id, title: h.title, channel: h.channel, thumbnail: h.thumbnail, duration: h.duration },
+          { video_id: h.video_id, title: h.title, channel: h.channel, channel_thumbnail: h.channel_thumbnail, thumbnail: h.thumbnail, duration: h.duration },
           `/watch?v=${encodeURIComponent(h.video_id)}`
         )).join("")
       : '<div class="empty-state">視聴履歴はありません</div>';
