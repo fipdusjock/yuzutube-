@@ -22,7 +22,7 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://aging-okay-disable-endless.trycloudflare.com").rstrip("/")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://conduct-affect-copyrighted-bench.trycloudflare.com").rstrip("/")
 # ytdlp_api側の YTDLP_API_SHARED_SECRET と同じ値を設定する。
 # これが一致しないとバックエンドがリクエストを弾くようになるので、
 # APIサーバーのURLを知っているだけの第三者が直接叩けないようにする仕組み。
