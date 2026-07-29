@@ -8,6 +8,7 @@
   <div class="settings-label">API サーバーのURL</div>
   <div class="settings-desc">
     ytdlp_apiのURLです。未入力の場合は既定のサーバーが使われます。
+    自分のサーバーが別の場所にある場合や、Cloudflare Tunnel等でURLが変わった場合はここで変更できます。
     このブラウザだけに保存され、サーバー側には保存されません。
   </div>
   <div class="settings-row">
@@ -21,6 +22,7 @@
 <div class="settings-box">
   <div class="settings-label">登録チャンネル・高評価・視聴履歴について</div>
   <div class="settings-desc">
+    これらはすべてこのブラウザのローカルストレージにだけ保存される「仮」の機能です。
     実際のYouTubeアカウントには一切反映されません。データを消したい場合は下のボタンから削除できます。
   </div>
   <div class="settings-row">
@@ -30,17 +32,16 @@
 </div>
 
 <div class="settings-box">
-  <div class="settings-label">サーバー側のキャッシュ</div>
+  <div class="settings-label">初期化(サーバー側のキャッシュを消す)</div>
   <div class="settings-desc">
     動画情報・チャンネル情報などは<code>ytdlp_api</code>側で7時間キャッシュされています。
     誤った情報がキャッシュされてしまった場合や、最新の状態を取り直したい場合はここから
-    サーバー側のキャッシュを全部消せます(このブラウザのデータではなく、サーバーが
-    保存しているキャッシュです。他の利用者にも影響します)。
-    サーバー側で設定した管理者パスワードが必要です。
+    初期化できます(このブラウザのデータではなく、サーバーが保存しているキャッシュです。
+    他の利用者にも影響します)。サーバー側で設定した管理者パスワードが必要です。
   </div>
   <div class="settings-row">
     <input type="password" id="serverCachePassword" placeholder="管理者パスワード">
-    <button id="clearServerCache" class="secondary">サーバー側のキャッシュを全部削除</button>
+    <button id="clearServerCache" class="secondary">初期化する</button>
   </div>
   <div class="settings-status" id="serverCacheStatus"></div>
 </div>

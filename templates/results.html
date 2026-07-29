@@ -4,7 +4,6 @@
 {% block body_data %}data-query="{{ query }}"{% endblock %}
 {% block content %}
 <h1 class="section-title">「{{ query }}」の検索結果</h1>
-<div class="search-filters" id="searchFilters"></div>
 <div class="grid" id="resultsGrid">
   {% for _ in range(12) %}
   <div class="card sk-card">
