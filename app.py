@@ -1,3 +1,18 @@
+"""
+Tubely (ytdlp_frontend) - ytdlp_apiを叩いて、YouTubeに寄せた見た目で
+検索・視聴・関連動画・コメントを表示するフロントエンド。
+
+ページ自体は即座に返す(スケルトン状態のHTML)。中身のデータはブラウザ側のJSが
+このFlaskアプリの /proxy/* を叩いて取りに行き、後から差し込む方式にしてある。
+こうしておくと:
+  - バックエンド(ytdlp_api)が重い/落ちてても最初の画面表示だけは即座に出る
+  - スケルトンローディング(灰色のプレースホルダーが後から本物に置き換わる演出)ができる
+  - /proxy/* はこのサーバー自身が叩くのでCORSを一切気にしなくていい
+
+サイト名は "Tubely" にしてある(YouTube本家と誤認されないように、あえて別名にしてある)。
+SITE_NAME環境変数で好きな名前に変更可能。
+"""
+
 import os
 import re
 
@@ -7,7 +22,7 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://conduct-affect-copyrighted-bench.trycloudflare.com").rstrip("/")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://definitions-corporation-producer-com.trycloudflare.com").rstrip("/")
 SITE_NAME = os.environ.get("SITE_NAME", "Tubely")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
@@ -192,14 +207,16 @@ def proxy_livechat(video_id):
 @app.route("/proxy/cache-clear-all", methods=["DELETE"])
 def proxy_cache_clear_all():
     """サーバー側(ytdlp_api)のキャッシュを全部消す。間違ったデータがキャッシュされた時の
-    強制リフレッシュ用。/settings ページから叩ける。"""
-    return _proxy("/api/cache", method="DELETE")
+    強制リフレッシュ用。/settings ページから叩ける。ytdlp_api側で設定した管理者パスワードが必要。"""
+    password = request.args.get("password", "")
+    return _proxy("/api/cache", method="DELETE", password=password)
 
 
 @app.route("/proxy/channel/<channel_id>")
 def proxy_channel(channel_id):
     limit = request.args.get("limit", "30")
-    return _proxy(f"/api/channel/{channel_id}", limit=limit)
+    tab = request.args.get("tab", "videos")
+    return _proxy(f"/api/channel/{channel_id}", limit=limit, tab=tab)
 
 
 @app.route("/proxy/playlist/<playlist_id>")
