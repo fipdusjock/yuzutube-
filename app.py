@@ -22,8 +22,7 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://conduct-affect-copyrighted-bench.trycloudflare.com").rstrip("/")
-API_SHARED_SECRET = os.environ.get("YTDLP_API_SHARED_SECRET", "7GfnehfY5T2VM6TG4AFUQK5zfYYOBam912tjHih1e2bAMcAo")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://definitions-corporation-producer-com.trycloudflare.com").rstrip("/")
 SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
@@ -152,8 +151,6 @@ def _resolve_api_base():
 def _proxy(path, method="GET", **params):
     api_base = _resolve_api_base()
     headers = {"X-Forwarded-For": _client_ip()}
-    if API_SHARED_SECRET:
-        headers["X-Internal-Secret"] = API_SHARED_SECRET
     try:
         resp = requests.request(method, f"{api_base}{path}", params=params, headers=headers, timeout=PROXY_TIMEOUT)
     except requests.RequestException as e:
@@ -189,11 +186,8 @@ def proxy_trending():
 def proxy_search():
     q = request.args.get("q", "")
     limit = request.args.get("limit", "24")
-    sp = request.args.get("sp", "")
     continuation = request.args.get("continuation", "")
     kwargs = {"q": q, "limit": limit}
-    if sp:
-        kwargs["sp"] = sp
     if continuation:
         kwargs["continuation"] = continuation
     return _proxy("/api/search", **kwargs)
@@ -234,8 +228,6 @@ def proxy_subtitles(video_id):
     auto = request.args.get("auto", "0")
     api_base = _resolve_api_base()
     headers = {"X-Forwarded-For": _client_ip()}
-    if API_SHARED_SECRET:
-        headers["X-Internal-Secret"] = API_SHARED_SECRET
     try:
         resp = requests.get(
             f"{api_base}/api/subtitles/{video_id}",
@@ -294,8 +286,6 @@ def media_proxy(video_id):
 
     range_header = request.headers.get("Range")
     fwd_headers = {"X-Forwarded-For": _client_ip()}
-    if API_SHARED_SECRET:
-        fwd_headers["X-Internal-Secret"] = API_SHARED_SECRET
     if range_header:
         fwd_headers["Range"] = range_header
 
