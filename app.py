@@ -22,19 +22,14 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://conduct-affect-copyrighted-bench.trycloudflare.com").rstrip("/")
-# ytdlp_api側の YTDLP_API_SHARED_SECRET と同じ値を設定する。
-# これが一致しないとバックエンドがリクエストを弾くようになるので、
-# APIサーバーのURLを知っているだけの第三者が直接叩けないようにする仕組み。
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://definitions-corporation-producer-com.trycloudflare.com").rstrip("/")
 API_SHARED_SECRET = os.environ.get("YTDLP_API_SHARED_SECRET", "")
 SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
-# /proxy/* からバックエンドを叩く時のタイムアウト。ページ自体は即返すので、
-# ここは「フェッチが固まって延々ローディングのままにならない」程度の短さでいい。
 PROXY_TIMEOUT = 60
 
-_URL_RE = re.compile(r"^https://[^\s]+$")  # 暗号化されていないhttp://は許可しない
+_URL_RE = re.compile(r"^https://[^\s]+$")
 
 
 @app.context_processor
@@ -44,8 +39,6 @@ def inject_globals():
 
 @app.route("/style.css")
 def style_css():
-    # Vercelはpublic/**をCDNから直接配信するのでこのルートは通らないが、
-    # Render/Railway/Termuxなど普通にFlaskプロセスとして動く環境向けのフォールバック。
     return send_from_directory(PUBLIC_DIR, "style.css")
 
 
@@ -54,7 +47,6 @@ def app_js():
     return send_from_directory(PUBLIC_DIR, "app.js")
 
 
-# ---------- テンプレート用フィルタ(現状はエラーページ等でしか使わないが残しておく) ----------
 
 def format_duration(seconds):
     if not seconds or isinstance(seconds, Undefined):
@@ -70,7 +62,6 @@ def format_duration(seconds):
 app.jinja_env.filters["duration"] = format_duration
 
 
-# ---------- ページルート(データを持たずに即レンダリング。中身はJSが後から取りに行く) ----------
 
 @app.route("/")
 def index():
@@ -85,8 +76,6 @@ def results():
     return render_template("results.html", query=q)
 
 
-# YouTubeの動画IDは常に11文字。プレイリストID(PL.../UU.../LL...等)は
-# もっと長く、こういう接頭辞を持つ。v=にプレイリストIDを間違って渡してしまうケースへの対応。
 _PLAYLIST_ID_PREFIXES = ("PL", "UU", "LL", "WL", "FL", "RD", "OL")
 
 
@@ -96,7 +85,6 @@ def watch():
     if not video_id:
         abort(404)
     if len(video_id) != 11 and video_id.startswith(_PLAYLIST_ID_PREFIXES):
-        # プレイリストIDが動画ID扱いで渡ってきたケース。プレイリストページへ誘導する。
         return redirect(url_for("playlist", list=video_id))
     return render_template("watch.html", video_id=video_id)
 
@@ -134,7 +122,6 @@ def not_found(e):
     return render_template("error.html", message="ページが見つかりません"), 404
 
 
-# ---------- プロキシAPI (ブラウザ側のfetchがここを叩く。JSON専用、常にJSONで返す) ----------
 
 def _client_ip():
     """
@@ -202,7 +189,14 @@ def proxy_trending():
 def proxy_search():
     q = request.args.get("q", "")
     limit = request.args.get("limit", "24")
-    return _proxy("/api/search", q=q, limit=limit)
+    sp = request.args.get("sp", "")
+    continuation = request.args.get("continuation", "")
+    kwargs = {"q": q, "limit": limit}
+    if sp:
+        kwargs["sp"] = sp
+    if continuation:
+        kwargs["continuation"] = continuation
+    return _proxy("/api/search", **kwargs)
 
 
 @app.route("/proxy/info/<video_id>")
@@ -271,7 +265,8 @@ def proxy_cache_clear_all():
 def proxy_channel(channel_id):
     limit = request.args.get("limit", "30")
     tab = request.args.get("tab", "videos")
-    return _proxy(f"/api/channel/{channel_id}", limit=limit, tab=tab)
+    offset = request.args.get("offset", "0")
+    return _proxy(f"/api/channel/{channel_id}", limit=limit, tab=tab, offset=offset)
 
 
 @app.route("/proxy/playlist/<playlist_id>")
@@ -280,7 +275,6 @@ def proxy_playlist(playlist_id):
     return _proxy(f"/api/playlist/{playlist_id}", limit=limit)
 
 
-# ---------- メディア中継 (実際の動画/音声バイト列をそのまま流す) ----------
 
 MEDIA_TIMEOUT = 30
 
@@ -343,6 +337,5 @@ def media_proxy(video_id):
 
 
 if __name__ == "__main__":
-    # RenderやRailwayは $PORT を渡してくる。無ければFRONTEND_PORT、それも無ければ8000。
     port = int(os.environ.get("PORT", os.environ.get("FRONTEND_PORT", "8000")))
     app.run(host="0.0.0.0", port=port, threaded=True)
