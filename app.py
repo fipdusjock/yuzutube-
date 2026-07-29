@@ -17,12 +17,12 @@ import os
 import re
 
 import requests
-from flask import Flask, render_template, request, redirect, url_for, abort, send_from_directory, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, abort, send_from_directory, jsonify, Response, make_response
 from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://range-counseling-bacteria-tuesday.trycloudflare.com").rstrip("/")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://definitions-corporation-producer-com.trycloudflare.com").rstrip("/")
 SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
@@ -36,6 +36,87 @@ def inject_globals():
     return {"site_name": SITE_NAME}
 
 
+@app.route("/login", methods=["GET"])
+def login_page():
+    if _current_user_email():
+        return redirect(url_for("index"))
+    return render_template("login.html")
+
+
+@app.route("/signup", methods=["GET"])
+def signup_page():
+    if _current_user_email():
+        return redirect(url_for("index"))
+    return render_template("signup.html")
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def do_login():
+    body = request.get_json(silent=True) or {}
+    api_base = _resolve_api_base()
+    try:
+        resp = requests.post(
+            f"{api_base}/api/auth/login",
+            json={"email": body.get("email", ""), "password": body.get("password", ""), "ip": _client_ip()},
+            timeout=PROXY_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        app.logger.error("login proxy failed: %s", e)
+        return jsonify({"error": True, "message": "サーバーに接続できませんでした"}), 502
+
+    if resp.status_code != 200:
+        try:
+            message = resp.json().get("detail", "ログインに失敗しました")
+        except ValueError:
+            message = "ログインに失敗しました"
+        return jsonify({"error": True, "message": message}), resp.status_code
+
+    data = resp.json()
+    response = make_response(jsonify({"email": data.get("email")}))
+    response.set_cookie(
+        SESSION_COOKIE_NAME, data.get("token", ""),
+        max_age=SESSION_MAX_AGE, httponly=True, secure=True, samesite="Lax",
+    )
+    return response
+
+
+@app.route("/api/auth/signup", methods=["POST"])
+def do_signup():
+    body = request.get_json(silent=True) or {}
+    api_base = _resolve_api_base()
+    try:
+        resp = requests.post(
+            f"{api_base}/api/auth/signup",
+            json={"email": body.get("email", ""), "password": body.get("password", ""), "ip": _client_ip()},
+            timeout=PROXY_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        app.logger.error("signup proxy failed: %s", e)
+        return jsonify({"error": True, "message": "サーバーに接続できませんでした"}), 502
+
+    if resp.status_code != 200:
+        try:
+            message = resp.json().get("detail", "登録に失敗しました")
+        except ValueError:
+            message = "登録に失敗しました"
+        return jsonify({"error": True, "message": message}), resp.status_code
+
+    data = resp.json()
+    response = make_response(jsonify({"email": data.get("email")}))
+    response.set_cookie(
+        SESSION_COOKIE_NAME, data.get("token", ""),
+        max_age=SESSION_MAX_AGE, httponly=True, secure=True, samesite="Lax",
+    )
+    return response
+
+
+@app.route("/logout", methods=["GET", "POST"])
+def logout():
+    response = make_response(redirect(url_for("login_page")))
+    response.delete_cookie(SESSION_COOKIE_NAME)
+    return response
+
+
 @app.route("/style.css")
 def style_css():
     return send_from_directory(PUBLIC_DIR, "style.css")
@@ -44,6 +125,11 @@ def style_css():
 @app.route("/app.js")
 def app_js():
     return send_from_directory(PUBLIC_DIR, "app.js")
+
+
+@app.route("/auth.css")
+def auth_css():
+    return send_from_directory(PUBLIC_DIR, "auth.css")
 
 
 
@@ -120,6 +206,47 @@ def history():
 def not_found(e):
     return render_template("error.html", message="ページが見つかりません"), 404
 
+
+
+SESSION_COOKIE_NAME = "yuzutube_session"
+SESSION_MAX_AGE = 7 * 24 * 3600  # 1週間
+
+# ログイン無しでもアクセスできるパス(ログイン/登録ページ自体、静的ファイル、
+# ログイン処理そのもののAPI)。それ以外は全部ログインしていないとリダイレクトされる。
+_AUTH_EXEMPT_PATHS = {
+    "/login", "/signup", "/logout", "/style.css", "/app.js", "/auth.css", "/favicon.ico",
+    "/api/auth/login", "/api/auth/signup",
+}
+
+
+def _current_user_email():
+    """このリクエストのCookieに入っているセッショントークンを検証してemailを返す。
+    無効/期限切れなら None。"""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        return None
+    api_base = _resolve_api_base()
+    try:
+        resp = requests.post(f"{api_base}/api/auth/verify", json={"token": token}, timeout=PROXY_TIMEOUT)
+    except requests.RequestException:
+        return None
+    if resp.status_code != 200:
+        return None
+    return resp.json().get("email")
+
+
+@app.before_request
+def _require_login():
+    path = request.path
+    if path in _AUTH_EXEMPT_PATHS:
+        return None
+    if _current_user_email():
+        return None
+    # ページ本体(HTML)はログインページへリダイレクト、
+    # /proxy/* や /media/* のようなAPI的なものは401 JSONで返す。
+    if path.startswith("/proxy/") or path.startswith("/media/"):
+        return jsonify({"error": True, "message": "ログインが必要です"}), 401
+    return redirect(url_for("login_page"))
 
 
 def _client_ip():
