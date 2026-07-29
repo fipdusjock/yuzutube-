@@ -38,8 +38,10 @@
     誤った情報がキャッシュされてしまった場合や、最新の状態を取り直したい場合はここから
     サーバー側のキャッシュを全部消せます(このブラウザのデータではなく、サーバーが
     保存しているキャッシュです。他の利用者にも影響します)。
+    サーバー側で設定した管理者パスワードが必要です。
   </div>
   <div class="settings-row">
+    <input type="password" id="serverCachePassword" placeholder="管理者パスワード">
     <button id="clearServerCache" class="secondary">サーバー側のキャッシュを全部削除</button>
   </div>
   <div class="settings-status" id="serverCacheStatus"></div>
