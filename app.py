@@ -23,7 +23,7 @@ from jinja2 import Undefined
 app = Flask(__name__)
 
 DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://conduct-affect-copyrighted-bench.trycloudflare.com").rstrip("/")
-API_SHARED_SECRET = os.environ.get("YTDLP_API_SHARED_SECRET", "")
+API_SHARED_SECRET = os.environ.get("YTDLP_API_SHARED_SECRET", "7GfnehfY5T2VM6TG4AFUQK5zfYYOBam912tjHih1e2bAMcAo")
 SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
