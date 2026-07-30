@@ -9,7 +9,11 @@ const ICONS = {
   volume: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M17 8a5 5 0 0 1 0 8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M19.5 5.5a9 9 0 0 1 0 13"/></svg>',
   volumeMute: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M16 9l5 6M21 9l-5 6"/></svg>',
   fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/></svg>',
-  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0-4-4m4 4 4-4"/><path d="M4 19h16"/></svg>'
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0-4-4m4 4 4-4"/><path d="M4 19h16"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
+  chevronRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
 };
 
 function icon(name) {
@@ -193,12 +197,13 @@ function skeletonGridHTML(count) {
   }, skeletonCardHTML).join("");
 }
 
-function videoCardHTML(e, watchHref) {
+function videoCardHTML(e, watchHref, options) {
+  const vertical = options && options.vertical;
   const isLive = e.live_status === "is_live";
   const badge = isLive ? `<span class="duration live-badge">LIVE</span>` : e.duration ? `<span class="duration">${escapeHtml(formatDuration(e.duration))}</span>` : "";
   const views = e.view_count ? formatViews(e.view_count) : e.view_count_text || "";
   const avatarHTML = e.channel_thumbnail ? `<img src="${escapeHtml(e.channel_thumbnail)}" alt="" loading="lazy">` : escapeHtml((e.channel || "?")[0] || "?");
-  return `\n    <a class="card" href="${watchHref}">\n      <div class="thumb-wrap">\n        ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}\n        ${badge}\n      </div>\n      <div class="meta">\n        <div class="avatar">${avatarHTML}</div>\n        <div>\n          <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>\n          <div class="sub">${escapeHtml(e.channel || "")}${isLive ? "" : views ? " &middot; " + escapeHtml(views) : ""}</div>\n        </div>\n      </div>\n    </a>`;
+  return `\n    <a class="card ${vertical ? "card-vertical" : ""}" href="${watchHref}">\n      <div class="thumb-wrap ${vertical ? "thumb-wrap-vertical" : ""}">\n        ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}\n        ${badge}\n      </div>\n      <div class="meta">\n        <div class="avatar">${avatarHTML}</div>\n        <div>\n          <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>\n          <div class="sub">${escapeHtml(e.channel || "")}${isLive ? "" : views ? " &middot; " + escapeHtml(views) : ""}</div>\n        </div>\n      </div>\n    </a>`;
 }
 
 function relatedCardHTML(e) {
@@ -385,12 +390,65 @@ function renderPlayer(wrap, stream, info) {
   }
   const defaultQuality = qualities.find(q => q.format_id === "18") || qualities[0] || null;
   const posterAttr = info.thumbnail ? ` poster="${escapeHtml(info.thumbnail)}"` : "";
-  const qualityOptionsHTML = qualities.map(q => {
-    const label = q.height ? `${q.height}p` : q.format_note || q.format_id || "?";
+  const speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  const qualityMenuHTML = qualities.map(q => {
+    const label = q.height ? `${q.height}p${q.fps && q.fps > 30 ? q.fps : ""}` : (q.format_note || q.format_id || "?");
     const isDefault = defaultQuality && q.format_id === defaultQuality.format_id;
-    return `<option value="${escapeHtml(q.format_id)}" ${isDefault ? "selected" : ""}>${escapeHtml(label)}${q.format_id === "18" ? " (標準)" : ""}</option>`;
+    return `<button type="button" class="settings-row settings-option" data-quality="${escapeHtml(q.format_id)}" data-selected="${isDefault ? "1" : "0"}"><span class="settings-check">${isDefault ? icon("check") : ""}</span><span>${escapeHtml(label)}${q.format_id === "18" ? " (標準)" : ""}</span></button>`;
   }).join("");
-  wrap.innerHTML = `\n    <div class="custom-player" id="customPlayer">\n      <video id="player" playsinline${posterAttr}></video>\n      <div class="player-spinner" id="playerSpinner"><div class="spinner-circle"></div></div>\n      <div class="player-controls">\n        <input type="range" class="seek-bar" id="seekBar" min="0" max="100" value="0" step="0.1">\n        <div class="controls-row">\n          <button class="ctrl-btn" id="playPauseBtn" aria-label="再生">${icon("play")}</button>\n          <div class="time-display"><span id="curTime">0:00</span>&nbsp;/&nbsp;<span id="durTime">0:00</span></div>\n          <div class="spacer"></div>\n          <button class="ctrl-btn" id="muteBtn" aria-label="ミュート切替">${icon("volume")}</button>\n          <input type="range" class="volume-bar" id="volumeBar" min="0" max="100" value="100" aria-label="音量">\n          ${subtitleOptions.length ? `<select class="quality-select" id="subtitleSelect" aria-label="字幕"><option value="">字幕オフ</option>${subtitleOptions.map((s, i) => `<option value="${i}">${escapeHtml(s.label)}</option>`).join("")}</select>` : ""}\n          ${qualities.length >= 1 ? `<select class="quality-select" id="qualitySelect" aria-label="画質">${qualityOptionsHTML}</select>` : ""}\n          <button class="ctrl-btn" id="downloadBtn" aria-label="ダウンロード">${icon("download")}</button>\n          <button class="ctrl-btn" id="fullscreenBtn" aria-label="全画面表示">${icon("fullscreen")}</button>\n        </div>\n      </div>\n    </div>`;
+  const speedMenuHTML = speedOptions.map(s => {
+    const label = s === 1 ? "標準" : `${s}`;
+    return `<button type="button" class="settings-row settings-option" data-speed="${s}" data-selected="${s === 1 ? "1" : "0"}"><span class="settings-check">${s === 1 ? icon("check") : ""}</span><span>${label}</span></button>`;
+  }).join("");
+  const subtitleMenuHTML = subtitleOptions.length ? [
+    `<button type="button" class="settings-row settings-option" data-sub="off" data-selected="1"><span class="settings-check">${icon("check")}</span><span>オフ</span></button>`,
+    ...subtitleOptions.map((s, i) => `<button type="button" class="settings-row settings-option" data-sub="${i}" data-selected="0"><span class="settings-check"></span><span>${escapeHtml(s.label)}</span></button>`),
+  ].join("") : "";
+
+  wrap.innerHTML = `
+    <div class="custom-player" id="customPlayer">
+      <video id="player" playsinline${posterAttr}></video>
+      <div class="player-spinner" id="playerSpinner"><div class="spinner-circle"></div></div>
+      <div class="speed-indicator" id="speedIndicator">${icon("play")}<span>2倍速で再生中</span></div>
+      <div class="player-controls">
+        <input type="range" class="seek-bar" id="seekBar" min="0" max="100" value="0" step="0.1">
+        <div class="controls-row">
+          <button class="ctrl-btn" id="playPauseBtn" aria-label="再生">${icon("play")}</button>
+          <div class="time-display"><span id="curTime">0:00</span>&nbsp;/&nbsp;<span id="durTime">0:00</span></div>
+          <div class="spacer"></div>
+          <button class="ctrl-btn" id="muteBtn" aria-label="ミュート切替">${icon("volume")}</button>
+          <input type="range" class="volume-bar" id="volumeBar" min="0" max="100" value="100" aria-label="音量">
+          <button class="ctrl-btn" id="settingsBtn" aria-label="設定">${icon("gear")}</button>
+          <button class="ctrl-btn" id="fullscreenBtn" aria-label="全画面表示">${icon("fullscreen")}</button>
+        </div>
+      </div>
+
+      <div class="settings-menu" id="settingsMenu" hidden>
+        <div class="settings-panel" data-panel="main">
+          ${qualities.length >= 1 ? `<button type="button" class="settings-row" data-open="quality"><span>画質</span><span class="settings-row-right"><span class="settings-row-value" id="qualityValueLabel">${escapeHtml(defaultQuality ? (defaultQuality.height ? defaultQuality.height + "p" : "?") : "?")}</span>${icon("chevronRight")}</span></button>` : ""}
+          <button type="button" class="settings-row" data-open="speed"><span>再生速度</span><span class="settings-row-right"><span class="settings-row-value" id="speedValueLabel">標準</span>${icon("chevronRight")}</span></button>
+          ${subtitleOptions.length ? `<button type="button" class="settings-row" data-open="subtitles"><span>字幕</span><span class="settings-row-right"><span class="settings-row-value" id="subtitleValueLabel">オフ</span>${icon("chevronRight")}</span></button>` : ""}
+          <button type="button" class="settings-row" data-open="info"><span>動画情報</span><span class="settings-row-right">${icon("chevronRight")}</span></button>
+          <a class="settings-row" id="downloadLink" href="${mediaProxyUrl(videoId, (defaultQuality || {}).format_id || "18")}&download=1" download><span>ダウンロード</span></a>
+        </div>
+        <div class="settings-panel" data-panel="quality" hidden>
+          <button type="button" class="settings-back">${icon("back")}<span>画質</span></button>
+          ${qualityMenuHTML}
+        </div>
+        <div class="settings-panel" data-panel="speed" hidden>
+          <button type="button" class="settings-back">${icon("back")}<span>再生速度</span></button>
+          ${speedMenuHTML}
+        </div>
+        <div class="settings-panel" data-panel="subtitles" hidden>
+          <button type="button" class="settings-back">${icon("back")}<span>字幕</span></button>
+          ${subtitleMenuHTML}
+        </div>
+        <div class="settings-panel" data-panel="info" hidden>
+          <button type="button" class="settings-back">${icon("back")}<span>動画情報</span></button>
+          <div class="settings-info-box" id="videoInfoPanel">読み込み中...</div>
+        </div>
+      </div>
+    </div>`;
   const videoEl = document.getElementById("player");
   const playerRoot = document.getElementById("customPlayer");
   const syncState = {
@@ -470,32 +528,124 @@ function renderPlayer(wrap, stream, info) {
     attachHlsSource(videoEl, hlsUrl);
   }
   wireCustomPlayerControls(videoEl, playerRoot, syncState);
-  const qualitySelect = document.getElementById("qualitySelect");
-  if (qualitySelect) {
-    qualitySelect.addEventListener("change", () => {
-      const chosen = qualities.find(q => q.format_id === qualitySelect.value);
-      if (chosen) loadSource(chosen, true);
+
+  // ---------- 歯車メニュー ----------
+  const settingsBtn = document.getElementById("settingsBtn");
+  const settingsMenu = document.getElementById("settingsMenu");
+  const qualityValueLabel = document.getElementById("qualityValueLabel");
+  const speedValueLabel = document.getElementById("speedValueLabel");
+  const subtitleValueLabel = document.getElementById("subtitleValueLabel");
+  const downloadLink = document.getElementById("downloadLink");
+  let currentTrackEl = null;
+  let currentFormatId = defaultQuality ? defaultQuality.format_id : null;
+
+  function showPanel(name) {
+    settingsMenu.querySelectorAll(".settings-panel").forEach(p => {
+      p.hidden = p.dataset.panel !== name;
     });
   }
-  const subtitleSelect = document.getElementById("subtitleSelect");
-  let currentTrackEl = null;
-  if (subtitleSelect) {
-    subtitleSelect.addEventListener("change", async () => {
+
+  if (settingsBtn && settingsMenu) {
+    settingsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = settingsMenu.hidden;
+      settingsMenu.hidden = !willOpen;
+      if (willOpen) showPanel("main");
+    });
+    document.addEventListener("click", (e) => {
+      if (!settingsMenu.hidden && !settingsMenu.contains(e.target) && e.target !== settingsBtn) {
+        settingsMenu.hidden = true;
+      }
+    });
+    settingsMenu.querySelectorAll("[data-open]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const panel = btn.dataset.open;
+        showPanel(panel);
+        if (panel === "info") renderVideoInfoPanel();
+      });
+    });
+    settingsMenu.querySelectorAll(".settings-back").forEach(btn => {
+      btn.addEventListener("click", () => showPanel("main"));
+    });
+  }
+
+  function renderVideoInfoPanel() {
+    const box = document.getElementById("videoInfoPanel");
+    if (!box) return;
+    const current = qualities.find(q => q.format_id === currentFormatId) || defaultQuality;
+    if (!current) {
+      box.textContent = "情報を取得できませんでした。";
+      return;
+    }
+    const rows = [
+      ["画質", current.height ? `${current.width || "?"}x${current.height}` : "-"],
+      ["フレームレート", current.fps ? `${current.fps} fps` : "-"],
+      ["コーデック", [current.vcodec, current.acodec].filter(v => v && v !== "none").join(" / ") || "-"],
+      ["ビットレート", current.tbr ? `${Math.round(current.tbr)} kbps` : "-"],
+      ["フォーマットID", current.format_id || "-"],
+    ];
+    box.innerHTML = rows.map(([k, v]) => `<div class="settings-info-row"><span>${escapeHtml(k)}</span><span>${escapeHtml(String(v))}</span></div>`).join("");
+  }
+
+  // 画質選択
+  settingsMenu.querySelectorAll("[data-quality]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const chosen = qualities.find(q => q.format_id === btn.dataset.quality);
+      if (!chosen) return;
+      currentFormatId = chosen.format_id;
+      loadSource(chosen, true);
+      settingsMenu.querySelectorAll("[data-quality]").forEach(b => {
+        const selected = b === btn;
+        b.dataset.selected = selected ? "1" : "0";
+        b.querySelector(".settings-check").innerHTML = selected ? icon("check") : "";
+      });
+      if (qualityValueLabel) qualityValueLabel.textContent = chosen.height ? `${chosen.height}p` : (chosen.format_note || "?");
+      if (downloadLink) downloadLink.href = `${mediaProxyUrl(videoId, currentFormatId)}&download=1`;
+      showPanel("main");
+    });
+  });
+
+  // 再生速度
+  settingsMenu.querySelectorAll("[data-speed]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const speed = parseFloat(btn.dataset.speed);
+      videoEl.playbackRate = speed;
+      if (syncState.audioEl) syncState.audioEl.playbackRate = speed;
+      settingsMenu.querySelectorAll("[data-speed]").forEach(b => {
+        const selected = b === btn;
+        b.dataset.selected = selected ? "1" : "0";
+        b.querySelector(".settings-check").innerHTML = selected ? icon("check") : "";
+      });
+      if (speedValueLabel) speedValueLabel.textContent = speed === 1 ? "標準" : String(speed);
+      showPanel("main");
+    });
+  });
+
+  // 字幕
+  settingsMenu.querySelectorAll("[data-sub]").forEach(btn => {
+    btn.addEventListener("click", async () => {
       if (currentTrackEl) {
         currentTrackEl.remove();
         currentTrackEl = null;
       }
-      const idx = subtitleSelect.value;
-      if (idx === "") return;
-      const chosen = subtitleOptions[Number(idx)];
+      settingsMenu.querySelectorAll("[data-sub]").forEach(b => {
+        b.dataset.selected = "0";
+        b.querySelector(".settings-check").innerHTML = "";
+      });
+      if (btn.dataset.sub === "off") {
+        btn.dataset.selected = "1";
+        btn.querySelector(".settings-check").innerHTML = icon("check");
+        if (subtitleValueLabel) subtitleValueLabel.textContent = "オフ";
+        showPanel("main");
+        return;
+      }
+      const chosen = subtitleOptions[Number(btn.dataset.sub)];
       if (!chosen) return;
       try {
         const res = await fetch(`/proxy/subtitles/${encodeURIComponent(videoId)}?lang=${encodeURIComponent(chosen.lang)}&auto=${chosen.auto ? 1 : 0}`);
         if (!res.ok) throw new Error("字幕の取得に失敗しました");
         const vttText = await res.text();
-        const blobUrl = URL.createObjectURL(new Blob([ vttText ], {
-          type: "text/vtt"
-        }));
+        const blobUrl = URL.createObjectURL(new Blob([vttText], { type: "text/vtt" }));
         const track = document.createElement("track");
         track.kind = "subtitles";
         track.label = chosen.label;
@@ -509,24 +659,46 @@ function renderPlayer(wrap, stream, info) {
             videoEl.textTracks[videoEl.textTracks.length - 1].mode = "showing";
           }
         }, 100);
+        btn.dataset.selected = "1";
+        btn.querySelector(".settings-check").innerHTML = icon("check");
+        if (subtitleValueLabel) subtitleValueLabel.textContent = chosen.label;
+        showPanel("main");
       } catch (e) {
-        subtitleSelect.value = "";
+        // 失敗時はオフのままにしておく
       }
     });
+  });
+
+  // ---------- 長押しで2倍速(YouTubeモバイルと同じ挙動) ----------
+  const speedIndicator = document.getElementById("speedIndicator");
+  let longPressTimer = null;
+  let longPressActive = false;
+  let normalSpeedBeforeHold = 1;
+
+  function startLongPress() {
+    longPressTimer = setTimeout(() => {
+      longPressActive = true;
+      normalSpeedBeforeHold = videoEl.playbackRate || 1;
+      videoEl.playbackRate = 2;
+      if (syncState.audioEl) syncState.audioEl.playbackRate = 2;
+      if (speedIndicator) speedIndicator.classList.add("show");
+    }, 450);
   }
-  const downloadBtn = document.getElementById("downloadBtn");
-  if (downloadBtn) {
-    downloadBtn.addEventListener("click", () => {
-      const currentFormatId = qualitySelect ? qualitySelect.value : defaultQuality && defaultQuality.format_id;
-      if (!currentFormatId) return;
-      const a = document.createElement("a");
-      a.href = `/media/${encodeURIComponent(videoId)}?format_id=${encodeURIComponent(currentFormatId)}&download=1`;
-      a.download = "";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    });
+  function endLongPress() {
+    clearTimeout(longPressTimer);
+    if (longPressActive) {
+      videoEl.playbackRate = normalSpeedBeforeHold;
+      if (syncState.audioEl) syncState.audioEl.playbackRate = normalSpeedBeforeHold;
+      if (speedIndicator) speedIndicator.classList.remove("show");
+      longPressActive = false;
+    }
   }
+  videoEl.addEventListener("touchstart", startLongPress, { passive: true });
+  videoEl.addEventListener("touchend", endLongPress);
+  videoEl.addEventListener("touchcancel", endLongPress);
+  videoEl.addEventListener("mousedown", startLongPress);
+  videoEl.addEventListener("mouseup", endLongPress);
+  videoEl.addEventListener("mouseleave", endLongPress);
 }
 
 function attachHlsSource(videoEl, hlsUrl) {
@@ -707,12 +879,14 @@ async function initChannelPage(channelId) {
       const entries = data.entries || [];
       hasMore = entries.length >= PAGE_SIZE;
       offset += entries.length;
-      const html = entries.map(e => videoCardHTML(e, `/watch?v=${encodeURIComponent(e.video_id)}`)).join("");
+      const isShorts = currentTab === "shorts";
+      const html = entries.map(e => videoCardHTML(e, `/watch?v=${encodeURIComponent(e.video_id)}`, { vertical: isShorts })).join("");
       if (reset) {
         grid.innerHTML = entries.length ? html : '<div class="empty-state">見つかりませんでした。</div>';
       } else if (entries.length) {
         grid.insertAdjacentHTML("beforeend", html);
       }
+      grid.classList.toggle("grid-shorts", isShorts);
       if (!scrollHandle) {
         scrollHandle = setupInfiniteScroll(grid.parentElement, () => loadEntries(false));
       }
@@ -851,16 +1025,90 @@ function initSettingsPage() {
 
 function toggleSidebar() {
   const sidebar = document.querySelector("nav.sidebar");
-  if (!sidebar) return;
-  const isMobile = window.matchMedia("(max-width: 700px)").matches;
-  if (isMobile) {
-    sidebar.classList.toggle("open");
-  } else {
-    sidebar.classList.toggle("collapsed");
+  if (sidebar) sidebar.classList.toggle("open");
+}
+
+function initSearchSuggest() {
+  const input = document.getElementById("searchInput");
+  const box = document.getElementById("searchSuggest");
+  const form = document.getElementById("searchForm");
+  if (!input || !box || !form) return;
+
+  let debounceTimer = null;
+  let items = [];
+  let activeIndex = -1;
+
+  function render() {
+    if (!items.length) {
+      box.hidden = true;
+      box.innerHTML = "";
+      return;
+    }
+    box.innerHTML = items.map((s, i) =>
+      `<div class="suggest-item ${i === activeIndex ? "active" : ""}" data-index="${i}">${escapeHtml(s)}</div>`
+    ).join("");
+    box.hidden = false;
+    box.querySelectorAll(".suggest-item").forEach((el) => {
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        input.value = items[Number(el.dataset.index)];
+        box.hidden = true;
+        form.submit();
+      });
+    });
   }
+
+  input.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    const q = input.value.trim();
+    activeIndex = -1;
+    if (!q) {
+      items = [];
+      render();
+      return;
+    }
+    debounceTimer = setTimeout(async () => {
+      try {
+        const data = await fetchJSON(`/proxy/suggest?q=${encodeURIComponent(q)}`);
+        items = data.suggestions || [];
+        render();
+      } catch (e) {
+        items = [];
+        render();
+      }
+    }, 200);
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (box.hidden || !items.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, items.length - 1);
+      render();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      activeIndex = Math.max(activeIndex - 1, -1);
+      render();
+    } else if (e.key === "Enter" && activeIndex >= 0) {
+      e.preventDefault();
+      input.value = items[activeIndex];
+      box.hidden = true;
+      form.submit();
+    } else if (e.key === "Escape") {
+      box.hidden = true;
+    }
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => { box.hidden = true; }, 150);
+  });
+  input.addEventListener("focus", () => {
+    if (items.length) box.hidden = false;
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initSearchSuggest();
   const ds = document.body.dataset;
   const page = ds.page;
   if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage();

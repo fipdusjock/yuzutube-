@@ -114,6 +114,7 @@ form.search {
   max-width: 640px;
   display: flex;
   margin: 0 auto;
+  position: relative;
 }
 form.search input {
   flex: 1;
@@ -142,12 +143,32 @@ form.search button {
 form.search button:hover { background: var(--bg-hover); }
 form.search button .icon { width: 18px; height: 18px; }
 
+.search-suggest {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 40px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
+.suggest-item {
+  padding: 10px 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.suggest-item:hover, .suggest-item.active { background: var(--bg-hover); }
+
 .layout {
   display: flex;
   align-items: flex-start;
 }
 
 nav.sidebar {
+  display: none;
   width: var(--sidebar-w);
   flex-shrink: 0;
   padding: 12px;
@@ -156,6 +177,7 @@ nav.sidebar {
   height: calc(100vh - var(--header-h));
   overflow-y: auto;
 }
+nav.sidebar.open { display: block; }
 nav.sidebar .item {
   display: flex;
   align-items: center;
@@ -190,13 +212,8 @@ main.content {
   nav.sidebar .hint { display: none; }
 }
 
-@media (min-width: 701px) {
-  nav.sidebar.collapsed { display: none; }
-}
-
 @media (max-width: 700px) {
   nav.sidebar {
-    display: none;
     position: fixed;
     left: 0;
     top: var(--header-h);
@@ -205,7 +222,6 @@ main.content {
     border-right: 1px solid var(--border);
     z-index: 30;
   }
-  nav.sidebar.open { display: block; }
   main.content { padding: 12px; }
   header.top { gap: 8px; padding: 0 8px; }
   .logo span.wordmark { display: none; }
@@ -218,6 +234,15 @@ main.content {
 }
 @media (max-width: 700px) {
   .grid { grid-template-columns: 1fr; gap: 20px; }
+}
+
+/* ショートタブは縦長動画なので、カード自体もぐっと細くする */
+.grid.grid-shorts {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px 12px;
+}
+@media (max-width: 700px) {
+  .grid.grid-shorts { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
 
 .card { cursor: pointer; display: block; }
@@ -235,6 +260,9 @@ main.content {
   object-fit: cover;
   display: block;
   transition: transform 0.25s ease;
+}
+.thumb-wrap-vertical {
+  aspect-ratio: 9 / 16;
 }
 .card:hover .thumb-wrap img { transform: scale(1.05); }
 .thumb-wrap .duration {
@@ -437,19 +465,97 @@ main.content {
   cursor: pointer;
 }
 
-.quality-select {
-  background: rgba(0,0,0,0.6);
+/* ---------- 長押し2倍速インジケーター ---------- */
+
+.speed-indicator {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,0,0,0.75);
   color: white;
-  border: 1px solid rgba(255,255,255,0.4);
-  border-radius: 4px;
-  font-size: 12px;
-  padding: 3px 4px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 5;
+}
+.speed-indicator .icon { width: 16px; height: 16px; }
+.speed-indicator.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- 歯車の設定メニュー ---------- */
+
+.settings-menu {
+  position: absolute;
+  right: 10px;
+  bottom: 50px;
+  width: 240px;
+  max-height: 70%;
+  overflow-y: auto;
+  background: rgba(24,24,24,0.96);
+  border-radius: 10px;
+  color: white;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  z-index: 6;
+}
+.settings-panel { padding: 6px 0; }
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 11px 14px;
   cursor: pointer;
+  text-decoration: none;
+}
+.settings-row:hover { background: rgba(255,255,255,0.1); }
+.settings-row-right { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.6); }
+.settings-row-right .icon { width: 16px; height: 16px; }
+.settings-option { gap: 10px; justify-content: flex-start; }
+.settings-check { width: 16px; height: 16px; flex-shrink: 0; display: inline-flex; }
+.settings-back {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  padding: 11px 14px;
+  margin-bottom: 4px;
+  cursor: pointer;
+}
+.settings-back .icon { width: 18px; height: 18px; }
+.settings-info-box { padding: 4px 14px 12px; }
+.settings-info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.85);
 }
 
 @media (max-width: 700px) {
-  .volume-bar { width: 44px; }
-  .quality-select { max-width: 64px; }
+  .volume-bar { display: none; }
+  .settings-menu { width: 200px; right: 6px; }
 }
 
 .player-fallback {
@@ -536,8 +642,10 @@ main.content {
 }
 .description-box:hover { background: var(--bg-hover); }
 .description-box .description-inner {
-  white-space: pre-wrap;
   word-break: break-word;
+}
+.description-box .description-text {
+  white-space: pre-wrap;
 }
 .description-box .top-line {
   color: var(--text-secondary);
@@ -683,6 +791,39 @@ main.content {
 .channel-tab-btn.active {
   color: var(--text);
   border-bottom-color: var(--text);
+}
+
+.changelog-version {
+  display: inline-block;
+  background: var(--bg-elevated);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+.changelog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.changelog-entry {
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+}
+.changelog-date {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 10px;
+}
+.changelog-changes {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-secondary);
 }
 
 .settings-box {
