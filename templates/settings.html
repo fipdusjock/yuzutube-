@@ -4,30 +4,54 @@
 {% block content %}
 <h1 class="section-title">設定</h1>
 
-<div class="settings-box">
-  <div class="settings-label">API サーバーのURL</div>
-  <div class="settings-row">
-    <input type="text" id="apiBaseInput" placeholder="https://your-api.example.com">
-    <button id="saveApiBase">保存</button>
-    <button id="resetApiBase" class="secondary">既定値に戻す</button>
+<div class="page-settings-group">
+  <div class="page-settings-group-title">接続</div>
+  <div class="page-settings-card">
+    <div class="page-settings-item">
+      <div class="page-settings-item-icon"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="20" height="8" rx="2"/><path d="M6 12h.01M10 12h.01"/></svg></span></div>
+      <div class="page-settings-item-body">
+        <div class="page-settings-item-title">API サーバーのURL</div>
+        <div class="page-settings-controls">
+          <input type="text" id="apiBaseInput" placeholder="https://your-api.example.com">
+          <button id="saveApiBase" class="page-settings-btn">保存</button>
+          <button id="resetApiBase" class="page-settings-btn secondary">既定値に戻す</button>
+        </div>
+        <div class="page-settings-status" id="apiBaseStatus"></div>
+      </div>
+    </div>
   </div>
-  <div class="settings-status" id="apiBaseStatus"></div>
 </div>
 
-<div class="settings-box">
-  <div class="settings-label">登録チャンネル・高評価・視聴履歴について</div>
-  <div class="settings-row">
-    <button id="clearLocalData" class="secondary">登録・高評価・履歴をすべて削除</button>
+<div class="page-settings-group">
+  <div class="page-settings-group-title">ローカルデータ</div>
+  <div class="page-settings-card">
+    <div class="page-settings-item">
+      <div class="page-settings-item-icon"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></span></div>
+      <div class="page-settings-item-body">
+        <div class="page-settings-item-title">登録チャンネル・高評価・視聴履歴</div>
+        <div class="page-settings-controls">
+          <button id="clearLocalData" class="page-settings-btn secondary">すべて削除</button>
+        </div>
+        <div class="page-settings-status" id="clearStatus"></div>
+      </div>
+    </div>
   </div>
-  <div class="settings-status" id="clearStatus"></div>
 </div>
 
-<div class="settings-box">
-  <div class="settings-label">初期化(サーバー側のキャッシュを消す)</div>
-  <div class="settings-row">
-    <input type="password" id="serverCachePassword" placeholder="管理者パスワード">
-    <button id="clearServerCache" class="secondary">初期化する</button>
+<div class="page-settings-group">
+  <div class="page-settings-group-title">サーバー管理</div>
+  <div class="page-settings-card">
+    <div class="page-settings-item page-settings-item--danger">
+      <div class="page-settings-item-icon"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span></div>
+      <div class="page-settings-item-body">
+        <div class="page-settings-item-title">初期化(サーバー側のキャッシュを消す)</div>
+        <div class="page-settings-controls">
+          <input type="password" id="serverCachePassword" placeholder="管理者パスワード">
+          <button id="clearServerCache" class="page-settings-btn danger">初期化する</button>
+        </div>
+        <div class="page-settings-status" id="serverCacheStatus"></div>
+      </div>
+    </div>
   </div>
-  <div class="settings-status" id="serverCacheStatus"></div>
 </div>
 {% endblock %}
