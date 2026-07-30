@@ -1,18 +1,3 @@
-"""
-Tubely (ytdlp_frontend) - ytdlp_apiを叩いて、YouTubeに寄せた見た目で
-検索・視聴・関連動画・コメントを表示するフロントエンド。
-
-ページ自体は即座に返す(スケルトン状態のHTML)。中身のデータはブラウザ側のJSが
-このFlaskアプリの /proxy/* を叩いて取りに行き、後から差し込む方式にしてある。
-こうしておくと:
-  - バックエンド(ytdlp_api)が重い/落ちてても最初の画面表示だけは即座に出る
-  - スケルトンローディング(灰色のプレースホルダーが後から本物に置き換わる演出)ができる
-  - /proxy/* はこのサーバー自身が叩くのでCORSを一切気にしなくていい
-
-サイト名は "Tubely" にしてある(YouTube本家と誤認されないように、あえて別名にしてある)。
-SITE_NAME環境変数で好きな名前に変更可能。
-"""
-
 import os
 import json
 import re
@@ -226,9 +211,6 @@ def not_found(e):
 
 SESSION_COOKIE_NAME = "yuzutube_session"
 SESSION_MAX_AGE = 7 * 24 * 3600  # 1週間
-
-# ログイン無しでもアクセスできるパス(ログイン/登録ページ自体、静的ファイル、
-# ログイン処理そのもののAPI)。それ以外は全部ログインしていないとリダイレクトされる。
 _AUTH_EXEMPT_PATHS = {
     "/login", "/signup", "/logout", "/style.css", "/app.js", "/auth.css", "/favicon.ico",
     "/api/auth/login", "/api/auth/signup", "/changelog",
@@ -266,12 +248,6 @@ def _require_login():
 
 
 def _client_ip():
-    """
-    Vercelは実際の訪問者IPを X-Forwarded-For ヘッダに入れて渡してくる
-    (Vercelのエッジ〜このFlaskアプリの間はVercelが面倒を見てくれている)。
-    このIPをバックエンド(ytdlp_api)側にも転送しておくことで、
-    バックエンド側で不正利用対策(レート制限等)をしたくなった時に使えるようにする。
-    """
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -279,12 +255,6 @@ def _client_ip():
 
 
 def _resolve_api_base():
-    """
-    設定画面でユーザーが独自のAPI URLを指定していれば(?api_base=...)そちらを使う。
-    未指定/不正な値なら環境変数のデフォルトにフォールバックする。
-    誰でも叩けるエンドポイントなので、httpかhttpsのURLっぽい形かだけは軽く検証しておく
-    (完全なSSRF対策ではない。個人利用のツールという前提)。
-    """
     override = request.args.get("api_base", "").strip()
     if override and _URL_RE.match(override):
         return override.rstrip("/")
@@ -372,7 +342,6 @@ def proxy_livechat(video_id):
 
 @app.route("/proxy/subtitles/<video_id>")
 def proxy_subtitles(video_id):
-    """字幕はJSONではなくWebVTTのテキストなので、_proxy()を使わず専用処理にしている。"""
     lang = request.args.get("lang", "ja")
     auto = request.args.get("auto", "0")
     api_base = _resolve_api_base()
@@ -396,8 +365,6 @@ def proxy_subtitles(video_id):
 
 @app.route("/proxy/cache-clear-all", methods=["DELETE"])
 def proxy_cache_clear_all():
-    """サーバー側(ytdlp_api)のキャッシュを全部消す。間違ったデータがキャッシュされた時の
-    強制リフレッシュ用。/settings ページから叩ける。ytdlp_api側で設定した管理者パスワードが必要。"""
     password = request.args.get("password", "")
     return _proxy("/api/cache", method="DELETE", password=password)
 
@@ -422,13 +389,6 @@ MEDIA_TIMEOUT = 30
 
 @app.route("/media/<video_id>")
 def media_proxy(video_id):
-    """
-    <video src="..."> / <audio src="..."> が直接叩くエンドポイント。
-    ytdlp_api の /api/proxy-stream をそのまま中継するだけ。二段プロキシになるが、
-    こうしておくとブラウザからは常にこのフロントエンドのドメインしか見えないので、
-    設定画面で隠しているAPIサーバーのURLがバレることもない。
-    Rangeヘッダもそのまま転送するのでシークも普通に効く。
-    """
     format_id = request.args.get("format_id", "18")
     api_base = _resolve_api_base()
     upstream_url = f"{api_base}/api/proxy-stream/{video_id}"
