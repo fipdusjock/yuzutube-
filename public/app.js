@@ -674,8 +674,12 @@ function renderPlayer(wrap, stream, info) {
   let longPressTimer = null;
   let longPressActive = false;
   let normalSpeedBeforeHold = 1;
+  let touchStartY = 0;
 
-  function startLongPress() {
+  function startLongPress(e) {
+    if (e.type === "touchstart") {
+      touchStartY = e.touches[0].clientY;
+    }
     longPressTimer = setTimeout(() => {
       longPressActive = true;
       normalSpeedBeforeHold = videoEl.playbackRate || 1;
@@ -693,9 +697,21 @@ function renderPlayer(wrap, stream, info) {
       longPressActive = false;
     }
   }
-  videoEl.addEventListener("touchstart", startLongPress, { passive: true });
+  // passive:falseにしてpreventDefault()できるようにし、長押し時にスマホ標準の
+  // テキスト選択/コンテキストメニュー(いわゆる「選択モード」)が出ないようにする。
+  videoEl.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    startLongPress(e);
+  }, { passive: false });
+  videoEl.addEventListener("touchmove", (e) => {
+    // 指を大きく動かした(スクロール操作等)場合は長押し判定をキャンセルする
+    if (Math.abs(e.touches[0].clientY - touchStartY) > 10) {
+      endLongPress();
+    }
+  }, { passive: true });
   videoEl.addEventListener("touchend", endLongPress);
   videoEl.addEventListener("touchcancel", endLongPress);
+  videoEl.addEventListener("contextmenu", (e) => e.preventDefault());
   videoEl.addEventListener("mousedown", startLongPress);
   videoEl.addEventListener("mouseup", endLongPress);
   videoEl.addEventListener("mouseleave", endLongPress);
@@ -825,6 +841,30 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState) {
       videoEl.webkitEnterFullscreen();
     }
   });
+
+  // ---------- 一定時間操作が無いとコントロールを隠す(YouTubeと同じ挙動) ----------
+  // 完全に消すのではなく、シークバーだけ細い赤線として下にうっすら残す。
+  const settingsMenuEl = playerRoot.querySelector("#settingsMenu");
+  let idleTimer = null;
+  function showControls() {
+    playerRoot.classList.remove("controls-idle");
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      // 一時停止中、または設定メニューを開いている間は隠さない
+      if (videoEl.paused) return;
+      if (settingsMenuEl && !settingsMenuEl.hidden) return;
+      playerRoot.classList.add("controls-idle");
+    }, 2800);
+  }
+  ["mousemove", "mousedown", "touchstart", "keydown"].forEach((ev) => {
+    playerRoot.addEventListener(ev, showControls, { passive: true });
+  });
+  videoEl.addEventListener("pause", () => {
+    clearTimeout(idleTimer);
+    playerRoot.classList.remove("controls-idle");
+  });
+  videoEl.addEventListener("play", showControls);
+  showControls();
 }
 
 const CHANNEL_TABS = [ {

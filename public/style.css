@@ -358,6 +358,9 @@ main.content {
   height: 100%;
   display: block;
   cursor: pointer;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .player-spinner {
@@ -388,7 +391,29 @@ main.content {
   bottom: 0;
   padding: 6px 10px 8px;
   background: linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0));
+  transition: background-color 0.3s ease, padding 0.3s ease;
 }
+.controls-row {
+  transition: opacity 0.3s ease;
+}
+
+/* 一定時間操作が無い時(YouTubeと同じ挙動)。ボタン類は消すが、
+   シークバーだけ細い線としてうっすら下に残す。 */
+.custom-player.controls-idle .player-controls {
+  background: none;
+  padding-bottom: 0;
+}
+.custom-player.controls-idle .controls-row {
+  opacity: 0;
+  pointer-events: none;
+}
+.custom-player.controls-idle .seek-bar {
+  height: 3px;
+  margin: 0;
+  pointer-events: none;
+}
+.custom-player.controls-idle .seek-bar::-webkit-slider-thumb { opacity: 0; }
+.custom-player.controls-idle .seek-bar::-moz-range-thumb { opacity: 0; }
 
 .seek-bar {
   width: 100%;
@@ -399,6 +424,7 @@ main.content {
   border-radius: 2px;
   cursor: pointer;
   margin: 0 0 6px;
+  transition: height 0.3s ease, margin 0.3s ease;
 }
 .seek-bar::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -406,6 +432,7 @@ main.content {
   border-radius: 50%;
   background: var(--red);
   cursor: pointer;
+  transition: opacity 0.2s ease;
 }
 .seek-bar::-moz-range-thumb {
   width: 13px; height: 13px;
@@ -826,47 +853,91 @@ main.content {
   color: var(--text-secondary);
 }
 
-.settings-box {
-  background: var(--bg-elevated);
-  border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 20px;
+.page-settings-group {
   max-width: 640px;
+  margin-bottom: 28px;
 }
-.settings-label { font-weight: 600; font-size: 15px; margin-bottom: 6px; }
-.settings-desc { color: var(--text-secondary); font-size: 13px; line-height: 1.6; margin-bottom: 14px; }
-.settings-desc code {
+.page-settings-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 10px 4px;
+}
+.page-settings-card {
+  background: var(--bg-elevated);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.page-settings-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+}
+.page-settings-item + .page-settings-item {
+  border-top: 1px solid var(--border);
+}
+.page-settings-item-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.page-settings-item-icon .icon { width: 19px; height: 19px; color: var(--text-secondary); }
+.page-settings-item-body { flex: 1; min-width: 0; }
+.page-settings-item-title { font-weight: 600; font-size: 14.5px; margin-bottom: 3px; }
+.page-settings-item-desc { color: var(--text-secondary); font-size: 12.5px; line-height: 1.6; margin-bottom: 12px; }
+.page-settings-item-desc code {
   background: var(--bg);
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11.5px;
 }
-.settings-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.settings-row input {
+.page-settings-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.page-settings-controls input {
   flex: 1;
-  min-width: 200px;
+  min-width: 180px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 9px 12px;
   color: var(--text);
   font-size: 13px;
 }
-.settings-row button {
+.page-settings-controls input:focus { outline: none; border-color: var(--accent); }
+.page-settings-btn {
   background: var(--accent);
   color: white;
   border: none;
   border-radius: 8px;
-  padding: 8px 16px;
+  padding: 9px 18px;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
 }
-.settings-row button.secondary {
+.page-settings-btn:hover { filter: brightness(1.08); }
+.page-settings-btn.secondary {
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border);
 }
-.settings-status { margin-top: 10px; font-size: 12px; color: var(--accent); min-height: 16px; }
+.page-settings-btn.danger {
+  background: transparent;
+  color: #ff5c5c;
+  border: 1px solid rgba(255,92,92,0.4);
+}
+.page-settings-btn.danger:hover { background: rgba(255,92,92,0.1); }
+.page-settings-status { margin-top: 10px; font-size: 12px; color: var(--accent); min-height: 16px; }
+.page-settings-item--danger .page-settings-item-icon { background: rgba(255,92,92,0.12); }
+.page-settings-item--danger .page-settings-item-icon .icon { color: #ff5c5c; }
 
 .secondary-btn {
   background: var(--bg-elevated);
