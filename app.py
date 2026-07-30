@@ -41,6 +41,17 @@ _BACKEND_REQUEST_HEADERS = {
 
 _URL_RE = re.compile(r"^https://[^\s]+$")
 
+# ytdlp_api側は /api/* 全体にトークン必須の門番を置くようになったが、
+# ytdlp_frontendだけは専用の合言葉(バックエンドと同じ値)を送ることで
+# そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
+# 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
+# コピーしてくるのが手っ取り早い)。
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
+
+
+def _backend_auth_headers():
+    return {"X-Frontend-Secret": FRONTEND_BYPASS_SECRET} if FRONTEND_BYPASS_SECRET else {}
+
 
 @app.context_processor
 def inject_globals():
@@ -69,7 +80,7 @@ def do_login():
         resp = requests.post(
             f"{api_base}/api/auth/login",
             json={"email": body.get("email", ""), "password": body.get("password", ""), "ip": _client_ip()},
-            headers=_BACKEND_REQUEST_HEADERS,
+            headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()},
             timeout=PROXY_TIMEOUT,
         )
     except requests.RequestException as e:
@@ -101,7 +112,7 @@ def do_signup():
         resp = requests.post(
             f"{api_base}/api/auth/signup",
             json={"email": body.get("email", ""), "password": body.get("password", ""), "ip": _client_ip()},
-            headers=_BACKEND_REQUEST_HEADERS,
+            headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()},
             timeout=PROXY_TIMEOUT,
         )
     except requests.RequestException as e:
@@ -255,7 +266,7 @@ def _current_user_email():
         return None
     api_base = _resolve_api_base()
     try:
-        resp = requests.post(f"{api_base}/api/auth/verify", json={"token": token}, headers=_BACKEND_REQUEST_HEADERS, timeout=PROXY_TIMEOUT)
+        resp = requests.post(f"{api_base}/api/auth/verify", json={"token": token}, headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()}, timeout=PROXY_TIMEOUT)
     except requests.RequestException:
         return None
     if resp.status_code != 200:
@@ -305,7 +316,7 @@ def _resolve_api_base():
 
 def _proxy(path, method="GET", **params):
     api_base = _resolve_api_base()
-    headers = {**_BACKEND_REQUEST_HEADERS, "X-Forwarded-For": _client_ip()}
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
     try:
         resp = requests.request(method, f"{api_base}{path}", params=params, headers=headers, timeout=PROXY_TIMEOUT)
     except requests.RequestException as e:
@@ -388,7 +399,7 @@ def proxy_subtitles(video_id):
     lang = request.args.get("lang", "ja")
     auto = request.args.get("auto", "0")
     api_base = _resolve_api_base()
-    headers = {**_BACKEND_REQUEST_HEADERS, "X-Forwarded-For": _client_ip()}
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
     try:
         resp = requests.get(
             f"{api_base}/api/subtitles/{video_id}",
@@ -446,7 +457,7 @@ def media_proxy(video_id):
     upstream_url = f"{api_base}/api/proxy-stream/{video_id}"
 
     range_header = request.headers.get("Range")
-    fwd_headers = {**_BACKEND_REQUEST_HEADERS, "X-Forwarded-For": _client_ip()}
+    fwd_headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
     if range_header:
         fwd_headers["Range"] = range_header
 
