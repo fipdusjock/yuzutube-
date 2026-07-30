@@ -22,11 +22,12 @@
       <span class="mark"><span class="icon"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg></span></span>
       <span class="wordmark">{{ site_name }}</span>
     </a>
-    <form class="search" action="/results" method="get">
-      <input type="text" name="q" placeholder="検索" value="{{ query|default('') }}">
+    <form class="search" action="/results" method="get" id="searchForm" autocomplete="off">
+      <input type="text" name="q" id="searchInput" placeholder="検索" value="{{ query|default('') }}">
       <button type="submit" aria-label="検索">
         <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg></span>
       </button>
+      <div class="search-suggest" id="searchSuggest" hidden></div>
     </form>
   </header>
 
@@ -48,6 +49,10 @@
       <a class="item {{ 'active' if request.path == '/settings' else '' }}" href="/settings">
         <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg></span>
         <span class="label">設定</span>
+      </a>
+      <a class="item {{ 'active' if request.path == '/changelog' else '' }}" href="/changelog">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg></span>
+        <span class="label">更新履歴</span>
       </a>
     </nav>
 

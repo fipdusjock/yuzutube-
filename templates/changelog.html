@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}更新履歴 - {{ site_name }}{% endblock %}
+{% block page_id %}changelog{% endblock %}
+{% block content %}
+<h1 class="section-title">更新履歴</h1>
+<div class="changelog-version">{{ version }}</div>
+
+<div class="changelog-list">
+  {% for entry in entries %}
+  <div class="changelog-entry">
+    <div class="changelog-date">{{ entry.date }}</div>
+    <ul class="changelog-changes">
+      {% for change in entry.changes %}
+      <li>{{ change }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% else %}
+  <div class="empty-state">更新履歴はまだありません。</div>
+  {% endfor %}
+</div>
+{% endblock %}
