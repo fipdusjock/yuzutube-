@@ -1,3 +1,18 @@
+"""
+Tubely (ytdlp_frontend) - ytdlp_apiを叩いて、YouTubeに寄せた見た目で
+検索・視聴・関連動画・コメントを表示するフロントエンド。
+
+ページ自体は即座に返す(スケルトン状態のHTML)。中身のデータはブラウザ側のJSが
+このFlaskアプリの /proxy/* を叩いて取りに行き、後から差し込む方式にしてある。
+こうしておくと:
+  - バックエンド(ytdlp_api)が重い/落ちてても最初の画面表示だけは即座に出る
+  - スケルトンローディング(灰色のプレースホルダーが後から本物に置き換わる演出)ができる
+  - /proxy/* はこのサーバー自身が叩くのでCORSを一切気にしなくていい
+
+サイト名は "Tubely" にしてある(YouTube本家と誤認されないように、あえて別名にしてある)。
+SITE_NAME環境変数で好きな名前に変更可能。
+"""
+
 import os
 import json
 import re
@@ -13,6 +28,10 @@ SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
 PROXY_TIMEOUT = 60
+# バックエンドへのリクエストにブラウザっぽいUser-Agentを付ける。
+# 素のPython requestsのUA(python-requests/x.x)のままだと、yuzu3da.comのように
+# Cloudflareの本物のゾーン(Bot対策付き)に乗っているドメインでは403でブロック
+# されることがあったための対応。
 _BACKEND_REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
