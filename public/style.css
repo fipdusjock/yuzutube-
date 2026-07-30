@@ -389,7 +389,7 @@ main.content {
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 6px 10px 8px;
+  padding: 2px 10px 6px;
   background: linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0));
   transition: background-color 0.3s ease, padding 0.3s ease;
 }
@@ -398,7 +398,9 @@ main.content {
 }
 
 /* 一定時間操作が無い時(YouTubeと同じ挙動)。ボタン類は消すが、
-   シークバーだけ細い線としてうっすら下に残す。 */
+   シークバーだけ細い線としてうっすら下に残す。
+   opacity:0だけだとレイアウト上のスペースが残ってシークバーが浮いた位置に
+   なってしまうため、height/marginも畳んでスペース自体を無くしている。 */
 .custom-player.controls-idle .player-controls {
   background: none;
   padding-bottom: 0;
@@ -406,6 +408,10 @@ main.content {
 .custom-player.controls-idle .controls-row {
   opacity: 0;
   pointer-events: none;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 .custom-player.controls-idle .seek-bar {
   height: 3px;
@@ -423,7 +429,7 @@ main.content {
   background: rgba(255,255,255,0.3);
   border-radius: 2px;
   cursor: pointer;
-  margin: 0 0 6px;
+  margin: 0 0 2px;
   transition: height 0.3s ease, margin 0.3s ease;
 }
 .seek-bar::-webkit-slider-thumb {

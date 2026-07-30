@@ -13,7 +13,8 @@ const ICONS = {
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
-  chevronRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
+  chevronRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>'
 };
 
 function icon(name) {
@@ -334,8 +335,30 @@ function renderVideoInfo(box, info, videoId) {
   if (info.view_count) stats.push(`<span class="stat-pill">${escapeHtml(formatViews(info.view_count))}</span>`);
   stats.push(likeButtonHTML(videoId, info.like_count));
   if (info.comment_count) stats.push(`<span class="stat-pill">${icon("comment")}${formatCountJa(info.comment_count)}</span>`);
+  stats.push(`<button type="button" class="stat-pill" id="shareBtn">${icon("share")}共有</button>`);
   const chapters = (info.chapters || []).map(c => `<div class="chapter-row"><span class="ts">${escapeHtml(formatDuration(Math.floor(c.start_time || 0)))}</span><span>${escapeHtml(c.title || "")}</span></div>`).join("");
   box.innerHTML = `\n    <div class="video-title">${escapeHtml(truncateText(info.title || "", 150))}</div>\n    <div class="video-meta-row">\n      <div class="video-owner">\n        <div class="avatar">${ownerAvatarHTML}</div>\n        <div class="video-owner-info">\n          <div class="name">${channelLink}</div>\n          ${info.channel_follower_count ? `<div class="subs">${formatCountJa(info.channel_follower_count)} 人の登録者</div>` : ""}\n        </div>\n      </div>\n      ${subscribeButtonHTML(info.channel_id, channelName, ownerAvatarSrc)}\n    </div>\n    <div class="video-stats-row">${stats.join("")}</div>\n    <div class="description-box" id="descriptionBox">\n      <div class="description-inner">\n        ${info.upload_date ? `<div class="top-line">${escapeHtml(formatUploadDate(info.upload_date))}</div>` : ""}\n        <div class="description-text">${escapeHtml(info.description || "(説明文なし)")}</div>\n        ${chapters ? `<div class="chapters"><div style="font-weight:600; margin-bottom:6px;">チャプター</div>${chapters}</div>` : ""}\n      </div>\n      <button type="button" class="desc-toggle-btn" id="descToggleBtn">もっと見る</button>\n    </div>`;
+  const shareBtn = document.getElementById("shareBtn");
+  if (shareBtn) {
+    shareBtn.addEventListener("click", async () => {
+      const shareUrl = `${window.location.origin}/watch?v=${encodeURIComponent(videoId)}`;
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: info.title || "", url: shareUrl });
+        } catch (e) {
+          // ユーザーがシェアシートを閉じただけの場合もここに来るので、何もしない
+        }
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        shareBtn.innerHTML = `${icon("check")}コピーしました`;
+        setTimeout(() => { shareBtn.innerHTML = `${icon("share")}共有`; }, 1800);
+      } catch (e) {
+        window.prompt("このURLをコピーしてください", shareUrl);
+      }
+    });
+  }
   const descBox = box.querySelector("#descriptionBox");
   const descToggleBtn = box.querySelector("#descToggleBtn");
   if (descBox && descToggleBtn) {
@@ -467,16 +490,10 @@ function renderPlayer(wrap, stream, info) {
     }
   }
   function attachWithFallback(el, directUrl, formatId) {
-    const proxyUrl = mediaProxyUrl(videoId, formatId);
-    let fellBack = false;
-    const onError = () => {
-      if (fellBack) return;
-      fellBack = true;
-      el.removeEventListener("error", onError);
-      el.src = proxyUrl;
-    };
-    el.addEventListener("error", onError);
-    el.src = directUrl || proxyUrl;
+    // 以前はCDN直リンクが失敗した時だけサーバー経由のプロキシに切り替えていたが、
+    // 画質を変えるたびに毎回「直リンクの失敗を待つ」オーバーヘッドが乗って重く
+    // 感じられていたため、プロキシ経由はやめて常に直リンクだけを使う方式にした。
+    el.src = directUrl || mediaProxyUrl(videoId, formatId);
   }
   function startAudioSync(audioQuality) {
     stopAudioSync();
