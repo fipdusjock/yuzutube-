@@ -14,6 +14,7 @@ SITE_NAME環境変数で好きな名前に変更可能。
 """
 
 import os
+import json
 import re
 
 import requests
@@ -22,7 +23,7 @@ from jinja2 import Undefined
 
 app = Flask(__name__)
 
-DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://range-counseling-bacteria-tuesday.trycloudflare.com").rstrip("/")
+DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://definitions-corporation-producer-com.trycloudflare.com").rstrip("/")
 SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
@@ -192,6 +193,19 @@ def settings():
     return render_template("settings.html")
 
 
+@app.route("/changelog")
+def changelog_page():
+    changelog_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "changelog.json")
+    try:
+        with open(changelog_path, encoding="utf-8") as f:
+            entries = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        entries = []
+    latest_date = entries[0]["date"] if entries else None
+    version = f"v{latest_date.replace('-', '.')}" if latest_date else "v0"
+    return render_template("changelog.html", entries=entries, version=version)
+
+
 @app.route("/subscriptions")
 def subscriptions():
     return render_template("subscriptions.html")
@@ -215,7 +229,7 @@ SESSION_MAX_AGE = 7 * 24 * 3600  # 1週間
 # ログイン処理そのもののAPI)。それ以外は全部ログインしていないとリダイレクトされる。
 _AUTH_EXEMPT_PATHS = {
     "/login", "/signup", "/logout", "/style.css", "/app.js", "/auth.css", "/favicon.ico",
-    "/api/auth/login", "/api/auth/signup",
+    "/api/auth/login", "/api/auth/signup", "/changelog",
 }
 
 
@@ -318,6 +332,12 @@ def proxy_search():
     if continuation:
         kwargs["continuation"] = continuation
     return _proxy("/api/search", **kwargs)
+
+
+@app.route("/proxy/suggest")
+def proxy_suggest():
+    q = request.args.get("q", "")
+    return _proxy("/api/suggest", q=q)
 
 
 @app.route("/proxy/info/<video_id>")
