@@ -1,7 +1,7 @@
 {
   "name": "yuzutube",
   "short_name": "yuzutube",
-  "description": "アプリ",
+  "description": "動画をシンプルに楽しむためのアプリ",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

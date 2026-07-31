@@ -144,18 +144,25 @@ function toggleSubscribe(channelId, meta) {
 }
 
 function isLiked(videoId) {
-  return getJSON(LIKES_KEY, []).includes(videoId);
+  return getJSON(LIKES_KEY, []).some(l => (typeof l === "string" ? l : l.video_id) === videoId);
 }
 
-function toggleLike(videoId) {
+function toggleLike(videoId, meta) {
   const likes = getJSON(LIKES_KEY, []);
-  const idx = likes.indexOf(videoId);
+  const idx = likes.findIndex(l => (typeof l === "string" ? l : l.video_id) === videoId);
   if (idx >= 0) {
     likes.splice(idx, 1);
     setJSON(LIKES_KEY, likes);
     return false;
   }
-  likes.push(videoId);
+  likes.unshift({
+    video_id: videoId,
+    title: (meta && meta.title) || "",
+    thumbnail: (meta && meta.thumbnail) || "",
+    channel: (meta && meta.channel) || "",
+    duration: (meta && meta.duration) || null,
+    liked_at: Date.now(),
+  });
   setJSON(LIKES_KEY, likes);
   return true;
 }
@@ -177,10 +184,11 @@ function subscribeButtonHTML(channelId, channelName, thumbnail) {
   return `<button class="subscribe-btn ${subscribed ? "subscribed" : ""}"\n    data-action="toggle-subscribe"\n    data-channel-id="${escapeHtml(channelId)}"\n    data-channel-name="${escapeHtml(channelName || "")}"\n    data-channel-thumb="${escapeHtml(thumbnail || "")}">\n    ${subscribed ? "登録済み" : "チャンネル登録"}\n  </button>`;
 }
 
-function likeButtonHTML(videoId, likeCount) {
+function likeButtonHTML(videoId, likeCount, meta) {
   const liked = isLiked(videoId);
   const countText = likeCount ? formatCountJa(likeCount) : "";
-  return `<button class="stat-pill like-btn ${liked ? "active" : ""}" data-action="toggle-like" data-video-id="${escapeHtml(videoId)}">\n    ${icon("thumbsUp")}${countText}\n  </button>`;
+  const m = meta || {};
+  return `<button class="stat-pill like-btn ${liked ? "active" : ""}" data-action="toggle-like"\n    data-video-id="${escapeHtml(videoId)}"\n    data-title="${escapeHtml(m.title || "")}"\n    data-thumbnail="${escapeHtml(m.thumbnail || "")}"\n    data-channel="${escapeHtml(m.channel || "")}"\n    data-duration="${escapeHtml(m.duration || "")}">\n    ${icon("thumbsUp")}${countText}\n  </button>`;
 }
 
 document.addEventListener("click", e => {
@@ -195,7 +203,12 @@ document.addEventListener("click", e => {
     btn.textContent = nowSubscribed ? "登録済み" : "チャンネル登録";
   }
   if (btn.dataset.action === "toggle-like") {
-    const nowLiked = toggleLike(btn.dataset.videoId);
+    const nowLiked = toggleLike(btn.dataset.videoId, {
+      title: btn.dataset.title,
+      thumbnail: btn.dataset.thumbnail,
+      channel: btn.dataset.channel,
+      duration: btn.dataset.duration ? Number(btn.dataset.duration) : null,
+    });
     btn.classList.toggle("active", nowLiked);
   }
 });
@@ -369,6 +382,19 @@ async function initWatchPage(videoId) {
       thumbnail: info.thumbnail || "",
       duration: info.duration || null
     });
+    // アカウントに同期される視聴履歴(ログイン中のみ有効、失敗しても無視してよい)
+    fetch("/proxy/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        video_id: videoId,
+        title: info.title || "",
+        channel: info.channel || info.uploader || "",
+        channel_id: info.channel_id || "",
+        thumbnail: info.thumbnail || "",
+        duration: info.duration || null,
+      }),
+    }).catch(() => {});
     if (info.is_live && liveChatPanel && liveChatBox) {
       liveChatPanel.style.display = "block";
       liveChatBox.innerHTML = '<div class="chat-note">チャットを読み込み中...</div>';
@@ -404,7 +430,12 @@ function renderVideoInfo(box, info, videoId) {
   const ownerAvatarHTML = ownerAvatarSrc ? `<img src="${escapeHtml(ownerAvatarSrc)}" alt="" loading="lazy">` : escapeHtml((channelName || "?")[0] || "?");
   const stats = [];
   if (info.view_count) stats.push(`<span class="stat-pill">${escapeHtml(formatViews(info.view_count))}</span>`);
-  stats.push(likeButtonHTML(videoId, info.like_count));
+  stats.push(likeButtonHTML(videoId, info.like_count, {
+    title: info.title,
+    thumbnail: info.thumbnail,
+    channel: channelName,
+    duration: info.duration,
+  }));
   if (info.comment_count) stats.push(`<span class="stat-pill">${icon("comment")}${formatCountJa(info.comment_count)}</span>`);
   stats.push(`<button type="button" class="stat-pill" id="shareBtn">${icon("share")}共有</button>`);
   const chapters = (info.chapters || []).map(c => `<div class="chapter-row"><span class="ts">${escapeHtml(formatDuration(Math.floor(c.start_time || 0)))}</span><span>${escapeHtml(c.title || "")}</span></div>`).join("");
@@ -511,6 +542,12 @@ function renderPlayer(wrap, stream, info) {
       <video id="player" playsinline${posterAttr}></video>
       <div class="player-spinner" id="playerSpinner"><div class="spinner-circle"></div></div>
       <div class="speed-indicator" id="speedIndicator">${icon("play")}<span>2倍速で再生中</span></div>
+      <div class="seek-tap-zone seek-tap-zone-left" id="seekTapLeft">
+        <div class="seek-tap-ring"><span class="seek-tap-arrows">${icon("chevronRight")}${icon("chevronRight")}</span><span class="seek-tap-label">10 秒</span></div>
+      </div>
+      <div class="seek-tap-zone seek-tap-zone-right" id="seekTapRight">
+        <div class="seek-tap-ring"><span class="seek-tap-arrows">${icon("chevronRight")}${icon("chevronRight")}</span><span class="seek-tap-label">10 秒</span></div>
+      </div>
       <div class="player-controls">
         <input type="range" class="seek-bar" id="seekBar" min="0" max="100" value="0" step="0.1">
         <div class="controls-row">
@@ -866,7 +903,10 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState) {
     }
   }
   playBtn.addEventListener("click", togglePlay);
-  videoEl.addEventListener("click", togglePlay);
+  videoEl.addEventListener("click", (e) => {
+    if (handleVideoClickForSkip(e)) return;
+    togglePlay();
+  });
   videoEl.addEventListener("play", () => {
     playBtn.innerHTML = icon("pause");
   });
@@ -958,6 +998,44 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState) {
     clearTimeout(idleTimer);
     playerRoot.classList.remove("controls-idle");
   });
+  // ---------- 10秒スキップ(左右ダブルタップ、YouTube同様の挙動) ----------
+  // タップ検知用のオーバーレイ要素は視覚効果(フラッシュ表示)専用で、
+  // pointer-events:noneなのでクリック自体はvideoElにそのまま届く。
+  // シングルクリックは再生/停止のまま維持し、同じ側を素早く2回クリックした時だけ
+  // 10秒スキップとして扱う(togglePlayは呼ばない)。
+  const tapLeft = playerRoot.querySelector("#seekTapLeft");
+  const tapRight = playerRoot.querySelector("#seekTapRight");
+  const SKIP_SECONDS = 10;
+  const DOUBLE_TAP_WINDOW_MS = 350;
+  let lastTapTime = 0;
+  let lastTapSide = null;
+  let skipHideTimer = null;
+
+  function performSkip(zoneEl, seconds) {
+    const newTime = Math.max(0, Math.min(videoEl.duration || Infinity, videoEl.currentTime + seconds));
+    videoEl.currentTime = newTime;
+    if (syncState.audioEl) syncState.audioEl.currentTime = newTime;
+    zoneEl.classList.add("show");
+    clearTimeout(skipHideTimer);
+    skipHideTimer = setTimeout(() => zoneEl.classList.remove("show"), 550);
+  }
+
+  function handleVideoClickForSkip(e) {
+    const rect = playerRoot.getBoundingClientRect();
+    const isRightSide = (e.clientX - rect.left) > rect.width / 2;
+    const side = isRightSide ? "right" : "left";
+    const now = Date.now();
+    if (lastTapSide === side && now - lastTapTime < DOUBLE_TAP_WINDOW_MS) {
+      performSkip(isRightSide ? tapRight : tapLeft, isRightSide ? SKIP_SECONDS : -SKIP_SECONDS);
+      lastTapTime = 0;
+      lastTapSide = null;
+      return true;
+    }
+    lastTapTime = now;
+    lastTapSide = side;
+    return false;
+  }
+
   videoEl.addEventListener("play", showControls);
   showControls();
 }
@@ -1120,11 +1198,50 @@ function initSubscriptionsPage() {
   box.innerHTML = subs.map(s => `\n    <a class="sub-row" href="/channel/${encodeURIComponent(s.channel_id)}">\n      <div class="avatar" style="width:48px;height:48px;">\n        ${s.thumbnail ? `<img src="${escapeHtml(s.thumbnail)}" alt="">` : escapeHtml((s.channel || "?")[0] || "?")}\n      </div>\n      <div class="title">${escapeHtml(s.channel || "")}</div>\n    </a>`).join("");
 }
 
+function initLikedPage() {
+  const listBox = document.getElementById("likedList");
+  const heroThumb = document.getElementById("likedHeroThumb");
+  const metaBox = document.getElementById("likedMeta");
+  const playAllBtn = document.getElementById("likedPlayAllBtn");
+  const likes = getJSON(LIKES_KEY, []).map(l => (typeof l === "string" ? { video_id: l } : l));
+
+  if (!likes.length) {
+    listBox.innerHTML = '<div class="empty-state">高く評価した動画はまだありません</div>';
+    if (metaBox) metaBox.textContent = "0 本の動画";
+    if (playAllBtn) playAllBtn.disabled = true;
+    return;
+  }
+
+  if (metaBox) metaBox.textContent = `${likes.length} 本の動画`;
+  if (heroThumb && likes[0].thumbnail) {
+    heroThumb.innerHTML = `<img src="${escapeHtml(likes[0].thumbnail)}" alt="">`;
+  }
+  if (playAllBtn) {
+    playAllBtn.addEventListener("click", () => {
+      window.location.href = `/watch?v=${encodeURIComponent(likes[0].video_id)}`;
+    });
+  }
+
+  listBox.innerHTML = likes.map((l, i) => `
+    <a class="pl-video-row" href="/watch?v=${encodeURIComponent(l.video_id)}">
+      <span class="pl-video-index">${i + 1}</span>
+      <span class="pl-video-thumb">
+        ${l.thumbnail ? `<img src="${escapeHtml(l.thumbnail)}" alt="" loading="lazy">` : ""}
+        ${l.duration ? `<span class="duration">${escapeHtml(formatDuration(l.duration))}</span>` : ""}
+      </span>
+      <span class="pl-video-body">
+        <span class="pl-video-title">${escapeHtml(l.title || "(タイトル不明)")}</span>
+        <span class="pl-video-channel">${escapeHtml(l.channel || "")}</span>
+      </span>
+    </a>`).join("");
+}
+
 function initHistoryPage() {
   const grid = document.getElementById("historyGrid");
-  function render() {
-    const hist = getJSON(HISTORY_KEY, []);
-    grid.innerHTML = hist.length ? hist.map(h => videoCardHTML({
+  const syncNote = document.getElementById("historySyncNote");
+
+  function renderEntries(entries) {
+    grid.innerHTML = entries.length ? entries.map(h => videoCardHTML({
       video_id: h.video_id,
       title: h.title,
       channel: h.channel,
@@ -1133,12 +1250,40 @@ function initHistoryPage() {
       duration: h.duration
     }, `/watch?v=${encodeURIComponent(h.video_id)}`)).join("") : '<div class="empty-state">視聴履歴はありません</div>';
   }
-  render();
+
+  function renderLocal() {
+    renderEntries(getJSON(HISTORY_KEY, []));
+  }
+
+  // ログイン中なら、アカウントに同期された視聴履歴を優先して表示する
+  // (別端末で見た動画もここに出てくる)。取得できなければローカルの履歴にフォールバックする。
+  fetch("/proxy/history?limit=100")
+    .then((res) => {
+      if (!res.ok) throw new Error("not logged in");
+      return res.json();
+    })
+    .then((data) => {
+      const entries = (data.entries || []).map((e) => ({
+        video_id: e.video_id, title: e.title, channel: e.channel,
+        channel_thumbnail: "", thumbnail: e.thumbnail, duration: e.duration,
+      }));
+      renderEntries(entries);
+      if (syncNote) syncNote.textContent = "アカウントに同期された履歴を表示しています(別端末で見た動画も含まれます)";
+    })
+    .catch(() => {
+      renderLocal();
+      if (syncNote) syncNote.textContent = "";
+    });
+
+  renderLocal(); // サーバーからの応答を待つ間、まずローカルの履歴を先に出しておく
+
   const clearBtn = document.getElementById("clearHistoryBtn");
   if (clearBtn) {
     clearBtn.addEventListener("click", () => {
       setJSON(HISTORY_KEY, []);
-      render();
+      fetch("/proxy/history", { method: "DELETE" }).catch(() => {});
+      renderLocal();
+      if (syncNote) syncNote.textContent = "";
     });
   }
 }
@@ -1355,7 +1500,7 @@ document.addEventListener("DOMContentLoaded", () => {
   recordAndShowVisitCount();
   const ds = document.body.dataset;
   const page = ds.page;
-  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage();
+  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage();
 });
 
 if ("serviceWorker" in navigator) {
