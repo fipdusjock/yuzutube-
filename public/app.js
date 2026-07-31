@@ -843,14 +843,19 @@ function renderPlayer(wrap, stream, info) {
       if (syncState.audioEl) syncState.audioEl.playbackRate = normalSpeedBeforeHold;
       if (speedIndicator) speedIndicator.classList.remove("show");
       longPressActive = false;
+      // 長押し(2倍速)を終えて指を離した直後、ブラウザによっては続けてclickイベントが
+      // 発火することがある。そのまま再生/停止やスキップが誤発火しないよう、
+      // 短い間だけ抑制フラグを立てる(wireCustomPlayerControls側のclickハンドラで見る)。
+      syncState.suppressNextClick = true;
+      setTimeout(() => { syncState.suppressNextClick = false; }, 400);
     }
   }
-  // passive:falseにしてpreventDefault()できるようにし、長押し時にスマホ標準の
-  // テキスト選択/コンテキストメニュー(いわゆる「選択モード」)が出ないようにする。
+  // 「選択モード」対策はCSS側(-webkit-touch-callout/user-select: none)で行っている。
+  // ここでpreventDefault()すると、その後のclickイベント(再生/停止・10秒スキップの
+  // ダブルタップ判定に使っている)がスマホで発火しなくなってしまうため呼ばない。
   videoEl.addEventListener("touchstart", (e) => {
-    e.preventDefault();
     startLongPress(e);
-  }, { passive: false });
+  }, { passive: true });
   videoEl.addEventListener("touchmove", (e) => {
     // 指を大きく動かした(スクロール操作等)場合は長押し判定をキャンセルする
     if (Math.abs(e.touches[0].clientY - touchStartY) > 10) {
@@ -920,6 +925,7 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState) {
   }
   playBtn.addEventListener("click", togglePlay);
   videoEl.addEventListener("click", (e) => {
+    if (syncState.suppressNextClick) return;
     if (handleVideoClickForSkip(e)) return;
     togglePlay();
   });
