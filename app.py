@@ -1,3 +1,18 @@
+"""
+Tubely (ytdlp_frontend) - ytdlp_apiを叩いて、YouTubeに寄せた見た目で
+検索・視聴・関連動画・コメントを表示するフロントエンド。
+
+ページ自体は即座に返す(スケルトン状態のHTML)。中身のデータはブラウザ側のJSが
+このFlaskアプリの /proxy/* を叩いて取りに行き、後から差し込む方式にしてある。
+こうしておくと:
+  - バックエンド(ytdlp_api)が重い/落ちてても最初の画面表示だけは即座に出る
+  - スケルトンローディング(灰色のプレースホルダーが後から本物に置き換わる演出)ができる
+  - /proxy/* はこのサーバー自身が叩くのでCORSを一切気にしなくていい
+
+サイト名は "Tubely" にしてある(YouTube本家と誤認されないように、あえて別名にしてある)。
+SITE_NAME環境変数で好きな名前に変更可能。
+"""
+
 import os
 import json
 import re
@@ -9,10 +24,14 @@ from jinja2 import Undefined
 app = Flask(__name__)
 
 DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://yuzu3da.com").rstrip("/")
-SITE_NAME = os.environ.get("SITE_NAME", "アップデート中")
+SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
 PROXY_TIMEOUT = 60
+# バックエンドへのリクエストにブラウザっぽいUser-Agentを付ける。
+# 素のPython requestsのUA(python-requests/x.x)のままだと、yuzu3da.comのように
+# Cloudflareの本物のゾーン(Bot対策付き)に乗っているドメインでは403でブロック
+# されることがあったための対応。
 _BACKEND_REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -22,7 +41,12 @@ _BACKEND_REQUEST_HEADERS = {
 
 _URL_RE = re.compile(r"^https://[^\s]+$")
 
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+# ytdlp_api側は /api/* 全体にトークン必須の門番を置くようになったが、
+# ytdlp_frontendだけは専用の合言葉(バックエンドと同じ値)を送ることで
+# そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
+# 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
+# コピーしてくるのが手っ取り早い)。
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -134,6 +158,45 @@ def auth_css():
     return send_from_directory(PUBLIC_DIR, "auth.css")
 
 
+@app.route("/manifest.json")
+def manifest_json():
+    return send_from_directory(PUBLIC_DIR, "manifest.json")
+
+
+@app.route("/sw.js")
+def service_worker():
+    # Service WorkerはルートスコープでOK。Cache-Controlを短くして更新を反映しやすくする。
+    resp = send_from_directory(PUBLIC_DIR, "sw.js")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/favicon.svg")
+def favicon_svg():
+    return send_from_directory(PUBLIC_DIR, "favicon.svg")
+
+
+@app.route("/favicon.ico")
+def favicon_ico():
+    # favicon.icoへの慣習的なアクセスにも、同じデザインのPNGを返しておく
+    return send_from_directory(PUBLIC_DIR, "favicon-32.png")
+
+
+@app.route("/favicon-16.png")
+def favicon_16():
+    return send_from_directory(PUBLIC_DIR, "favicon-16.png")
+
+
+@app.route("/favicon-32.png")
+def favicon_32():
+    return send_from_directory(PUBLIC_DIR, "favicon-32.png")
+
+
+@app.route("/icons/<path:filename>")
+def icons(filename):
+    return send_from_directory(os.path.join(PUBLIC_DIR, "icons"), filename)
+
+
 
 def format_duration(seconds):
     if not seconds or isinstance(seconds, Undefined):
@@ -224,15 +287,21 @@ def not_found(e):
 
 
 SESSION_COOKIE_NAME = "yuzutube_session"
-SESSION_MAX_AGE = 7 * 24 * 3600  
+SESSION_MAX_AGE = 7 * 24 * 3600  # 1週間
 
+# ログイン無しでもアクセスできるパス(ログイン/登録ページ自体、静的ファイル、
+# ログイン処理そのもののAPI)。それ以外は全部ログインしていないとリダイレクトされる。
 _AUTH_EXEMPT_PATHS = {
     "/login", "/signup", "/logout", "/style.css", "/app.js", "/auth.css", "/favicon.ico",
+    "/favicon.svg", "/favicon-16.png", "/favicon-32.png", "/manifest.json", "/sw.js",
     "/api/auth/login", "/api/auth/signup", "/changelog",
 }
+_AUTH_EXEMPT_PREFIXES = ("/icons/",)
 
 
 def _current_user_email():
+    """このリクエストのCookieに入っているセッショントークンを検証してemailを返す。
+    無効/期限切れなら None。"""
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if not token:
         return None
@@ -249,17 +318,24 @@ def _current_user_email():
 @app.before_request
 def _require_login():
     path = request.path
-    if path in _AUTH_EXEMPT_PATHS:
+    if path in _AUTH_EXEMPT_PATHS or path.startswith(_AUTH_EXEMPT_PREFIXES):
         return None
     if _current_user_email():
         return None
+    # ページ本体(HTML)はログインページへリダイレクト、
+    # /proxy/* や /media/* のようなAPI的なものは401 JSONで返す。
     if path.startswith("/proxy/") or path.startswith("/media/"):
         return jsonify({"error": True, "message": "ログインが必要です"}), 401
     return redirect(url_for("login_page"))
 
 
 def _client_ip():
-
+    """
+    Vercelは実際の訪問者IPを X-Forwarded-For ヘッダに入れて渡してくる
+    (Vercelのエッジ〜このFlaskアプリの間はVercelが面倒を見てくれている)。
+    このIPをバックエンド(ytdlp_api)側にも転送しておくことで、
+    バックエンド側で不正利用対策(レート制限等)をしたくなった時に使えるようにする。
+    """
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -267,7 +343,12 @@ def _client_ip():
 
 
 def _resolve_api_base():
-
+    """
+    設定画面でユーザーが独自のAPI URLを指定していれば(?api_base=...)そちらを使う。
+    未指定/不正な値なら環境変数のデフォルトにフォールバックする。
+    誰でも叩けるエンドポイントなので、httpかhttpsのURLっぽい形かだけは軽く検証しておく
+    (完全なSSRF対策ではない。個人利用のツールという前提)。
+    """
     override = request.args.get("api_base", "").strip()
     if override and _URL_RE.match(override):
         return override.rstrip("/")
@@ -307,6 +388,11 @@ def proxy_trending():
     limit = request.args.get("limit", "24")
     category = request.args.get("category", "trending")
     return _proxy("/api/trending", limit=limit, category=category)
+
+
+@app.route("/proxy/visit", methods=["GET", "POST"])
+def proxy_visit():
+    return _proxy("/api/visit", method=request.method)
 
 
 @app.route("/proxy/search")
@@ -356,6 +442,7 @@ def proxy_livechat(video_id):
 
 @app.route("/proxy/subtitles/<video_id>")
 def proxy_subtitles(video_id):
+    """字幕はJSONではなくWebVTTのテキストなので、_proxy()を使わず専用処理にしている。"""
     lang = request.args.get("lang", "ja")
     auto = request.args.get("auto", "0")
     api_base = _resolve_api_base()
@@ -379,6 +466,8 @@ def proxy_subtitles(video_id):
 
 @app.route("/proxy/cache-clear-all", methods=["DELETE"])
 def proxy_cache_clear_all():
+    """サーバー側(ytdlp_api)のキャッシュを全部消す。間違ったデータがキャッシュされた時の
+    強制リフレッシュ用。/settings ページから叩ける。ytdlp_api側で設定した管理者パスワードが必要。"""
     password = request.args.get("password", "")
     return _proxy("/api/cache", method="DELETE", password=password)
 
@@ -403,7 +492,13 @@ MEDIA_TIMEOUT = 30
 
 @app.route("/media/<video_id>")
 def media_proxy(video_id):
-
+    """
+    <video src="..."> / <audio src="..."> が直接叩くエンドポイント。
+    ytdlp_api の /api/proxy-stream をそのまま中継するだけ。二段プロキシになるが、
+    こうしておくとブラウザからは常にこのフロントエンドのドメインしか見えないので、
+    設定画面で隠しているAPIサーバーのURLがバレることもない。
+    Rangeヘッダもそのまま転送するのでシークも普通に効く。
+    """
     format_id = request.args.get("format_id", "18")
     api_base = _resolve_api_base()
     upstream_url = f"{api_base}/api/proxy-stream/{video_id}"
