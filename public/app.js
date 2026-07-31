@@ -397,7 +397,7 @@ async function initWatchPage(videoId) {
       thumbnail: info.thumbnail || "",
       duration: info.duration || null
     });
-    // みんなの視聴履歴に記録(失敗しても無視してよい)
+    // 視聴履歴に記録(失敗しても無視してよい)
     fetch("/proxy/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -406,6 +406,7 @@ async function initWatchPage(videoId) {
         title: info.title || "",
         channel: info.channel || info.uploader || "",
         channel_id: info.channel_id || "",
+        channel_thumbnail: info.channel_avatar_base64 || info.channel_avatar || "",
         thumbnail: info.thumbnail || "",
         duration: info.duration || null,
       }),
@@ -1253,43 +1254,26 @@ function initLikedPage() {
 
 function initHistoryPage() {
   const grid = document.getElementById("historyGrid");
-  const syncNote = document.getElementById("historySyncNote");
 
   function renderEntries(entries) {
     grid.innerHTML = entries.length ? entries.map(h => videoCardHTML({
       video_id: h.video_id,
       title: h.title,
       channel: h.channel,
-      channel_thumbnail: "",
+      channel_thumbnail: h.channel_thumbnail || "",
       thumbnail: h.thumbnail,
-      duration: h.duration
-    }, `/watch?v=${encodeURIComponent(h.video_id)}`)).join("") : '<div class="empty-state">まだ誰も動画を見ていません</div>';
+      duration: h.duration,
+      view_count_text: `このサイトで${h.view_count || 1}回視聴`,
+    }, `/watch?v=${encodeURIComponent(h.video_id)}`)).join("") : '<div class="empty-state">まだ動画が見られていません</div>';
   }
 
-  // 個人の履歴ではなく、このサイトを見ている「みんな」が最近見た動画のフィード。
-  // 取得に失敗した場合(未ログイン等)は、このブラウザだけのローカル履歴にフォールバックする。
   fetch("/proxy/history?limit=100")
     .then((res) => {
       if (!res.ok) throw new Error("failed");
       return res.json();
     })
-    .then((data) => {
-      renderEntries(data.entries || []);
-      if (syncNote) syncNote.textContent = "このサイトを見ているみんなが最近見た動画です";
-    })
-    .catch(() => {
-      renderEntries(getJSON(HISTORY_KEY, []));
-      if (syncNote) syncNote.textContent = "(みんなの履歴を取得できなかったため、このブラウザだけの履歴を表示しています)";
-    });
-
-  const clearBtn = document.getElementById("clearHistoryBtn");
-  if (clearBtn) {
-    clearBtn.textContent = "このブラウザの履歴だけ削除";
-    clearBtn.addEventListener("click", () => {
-      setJSON(HISTORY_KEY, []);
-      alert("このブラウザに保存されていたローカルの履歴を削除しました(みんなの履歴には影響しません)。");
-    });
-  }
+    .then((data) => renderEntries(data.entries || []))
+    .catch(() => renderEntries(getJSON(HISTORY_KEY, [])));
 }
 
 function initSettingsPage() {
