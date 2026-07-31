@@ -1,3 +1,18 @@
+"""
+Tubely (ytdlp_frontend) - ytdlp_apiを叩いて、YouTubeに寄せた見た目で
+検索・視聴・関連動画・コメントを表示するフロントエンド。
+
+ページ自体は即座に返す(スケルトン状態のHTML)。中身のデータはブラウザ側のJSが
+このFlaskアプリの /proxy/* を叩いて取りに行き、後から差し込む方式にしてある。
+こうしておくと:
+  - バックエンド(ytdlp_api)が重い/落ちてても最初の画面表示だけは即座に出る
+  - スケルトンローディング(灰色のプレースホルダーが後から本物に置き換わる演出)ができる
+  - /proxy/* はこのサーバー自身が叩くのでCORSを一切気にしなくていい
+
+サイト名は "Tubely" にしてある(YouTube本家と誤認されないように、あえて別名にしてある)。
+SITE_NAME環境変数で好きな名前に変更可能。
+"""
+
 import os
 import json
 import re
@@ -31,7 +46,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -537,6 +552,7 @@ def media_proxy(video_id):
     Rangeヘッダもそのまま転送するのでシークも普通に効く。
     """
     format_id = request.args.get("format_id", "18")
+    download = request.args.get("download", "0")
     api_base = _resolve_api_base()
     upstream_url = f"{api_base}/api/proxy-stream/{video_id}"
 
@@ -548,7 +564,7 @@ def media_proxy(video_id):
     try:
         upstream = requests.get(
             upstream_url,
-            params={"format_id": format_id},
+            params={"format_id": format_id, "download": download},
             headers=fwd_headers,
             stream=True,
             timeout=MEDIA_TIMEOUT,
@@ -563,7 +579,7 @@ def media_proxy(video_id):
         abort(502, description="動画データの取得に失敗しました")
 
     passthrough_headers = {}
-    for h in ("Content-Range", "Content-Length", "Accept-Ranges", "Content-Type"):
+    for h in ("Content-Range", "Content-Length", "Accept-Ranges", "Content-Type", "Content-Disposition"):
         if h in upstream.headers:
             passthrough_headers[h] = upstream.headers[h]
     passthrough_headers.setdefault("Accept-Ranges", "bytes")
