@@ -9,7 +9,7 @@ from jinja2 import Undefined
 app = Flask(__name__)
 
 DEFAULT_API_BASE = os.environ.get("YTDLP_API_BASE_URL", "https://yuzu3da.com").rstrip("/")
-SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
+SITE_NAME = os.environ.get("SITE_NAME", "アップデート中")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
 PROXY_TIMEOUT = 60
