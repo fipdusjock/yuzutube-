@@ -106,8 +106,23 @@ function showError(container, message) {
 const SUBS_KEY = "tubely_subscriptions";
 
 const LIKES_KEY = "tubely_likes";
+const LIKES_MIGRATION_FLAG_KEY = "tubely_likes_migrated_v2";
 
 const HISTORY_KEY = "tubely_history";
+
+function migrateLikesIfNeeded() {
+  // 以前のバージョンでは、いいねは動画IDの文字列配列だけで保存していて、
+  // タイトルやサムネイルなどのメタ情報を持っていなかった。そのままだと
+  // 「高く評価した動画」ページで情報が空欄・壊れて見えてしまうため、
+  // 古い形式のデータが残っていたら一度だけ自動的にリセットする。
+  if (localStorage.getItem(LIKES_MIGRATION_FLAG_KEY)) return;
+  const raw = getJSON(LIKES_KEY, []);
+  const isOldFormat = raw.some(item => typeof item === "string" || !item || !item.title);
+  if (isOldFormat && raw.length) {
+    setJSON(LIKES_KEY, []);
+  }
+  localStorage.setItem(LIKES_MIGRATION_FLAG_KEY, "1");
+}
 
 function getJSON(key, fallback) {
   try {
@@ -382,7 +397,7 @@ async function initWatchPage(videoId) {
       thumbnail: info.thumbnail || "",
       duration: info.duration || null
     });
-    // アカウントに同期される視聴履歴(ログイン中のみ有効、失敗しても無視してよい)
+    // みんなの視聴履歴に記録(失敗しても無視してよい)
     fetch("/proxy/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1245,45 +1260,34 @@ function initHistoryPage() {
       video_id: h.video_id,
       title: h.title,
       channel: h.channel,
-      channel_thumbnail: h.channel_thumbnail,
+      channel_thumbnail: "",
       thumbnail: h.thumbnail,
       duration: h.duration
-    }, `/watch?v=${encodeURIComponent(h.video_id)}`)).join("") : '<div class="empty-state">視聴履歴はありません</div>';
+    }, `/watch?v=${encodeURIComponent(h.video_id)}`)).join("") : '<div class="empty-state">まだ誰も動画を見ていません</div>';
   }
 
-  function renderLocal() {
-    renderEntries(getJSON(HISTORY_KEY, []));
-  }
-
-  // ログイン中なら、アカウントに同期された視聴履歴を優先して表示する
-  // (別端末で見た動画もここに出てくる)。取得できなければローカルの履歴にフォールバックする。
+  // 個人の履歴ではなく、このサイトを見ている「みんな」が最近見た動画のフィード。
+  // 取得に失敗した場合(未ログイン等)は、このブラウザだけのローカル履歴にフォールバックする。
   fetch("/proxy/history?limit=100")
     .then((res) => {
-      if (!res.ok) throw new Error("not logged in");
+      if (!res.ok) throw new Error("failed");
       return res.json();
     })
     .then((data) => {
-      const entries = (data.entries || []).map((e) => ({
-        video_id: e.video_id, title: e.title, channel: e.channel,
-        channel_thumbnail: "", thumbnail: e.thumbnail, duration: e.duration,
-      }));
-      renderEntries(entries);
-      if (syncNote) syncNote.textContent = "アカウントに同期された履歴を表示しています(別端末で見た動画も含まれます)";
+      renderEntries(data.entries || []);
+      if (syncNote) syncNote.textContent = "このサイトを見ているみんなが最近見た動画です";
     })
     .catch(() => {
-      renderLocal();
-      if (syncNote) syncNote.textContent = "";
+      renderEntries(getJSON(HISTORY_KEY, []));
+      if (syncNote) syncNote.textContent = "(みんなの履歴を取得できなかったため、このブラウザだけの履歴を表示しています)";
     });
-
-  renderLocal(); // サーバーからの応答を待つ間、まずローカルの履歴を先に出しておく
 
   const clearBtn = document.getElementById("clearHistoryBtn");
   if (clearBtn) {
+    clearBtn.textContent = "このブラウザの履歴だけ削除";
     clearBtn.addEventListener("click", () => {
       setJSON(HISTORY_KEY, []);
-      fetch("/proxy/history", { method: "DELETE" }).catch(() => {});
-      renderLocal();
-      if (syncNote) syncNote.textContent = "";
+      alert("このブラウザに保存されていたローカルの履歴を削除しました(みんなの履歴には影響しません)。");
     });
   }
 }
@@ -1352,6 +1356,53 @@ function initSettingsPage() {
 function toggleSidebar() {
   const sidebar = document.querySelector("nav.sidebar");
   if (sidebar) sidebar.classList.toggle("open");
+}
+
+const UPDATE_VERSION_SEEN_KEY = "tubely_last_seen_version";
+
+function checkForFrontendUpdate() {
+  fetch("/api/frontend-version")
+    .then((res) => res.json())
+    .then((data) => {
+      const seen = localStorage.getItem(UPDATE_VERSION_SEEN_KEY);
+      if (!data.version) return;
+      if (seen === null) {
+        // 初回訪問(このブラウザで一度も見たことが無い)は、通知せず現在のバージョンを覚えるだけ
+        localStorage.setItem(UPDATE_VERSION_SEEN_KEY, data.version);
+        return;
+      }
+      if (seen !== data.version) {
+        showUpdateBanner(data);
+        localStorage.setItem(UPDATE_VERSION_SEEN_KEY, data.version);
+      }
+    })
+    .catch(() => {});
+}
+
+function showUpdateBanner(data) {
+  const existing = document.getElementById("updateBanner");
+  if (existing) existing.remove();
+
+  const changesList = (data.changes || []).slice(0, 3).map(c => `<li>${escapeHtml(c)}</li>`).join("");
+  const banner = document.createElement("div");
+  banner.id = "updateBanner";
+  banner.className = "update-banner";
+  banner.innerHTML = `
+    <div class="update-banner-body">
+      <div class="update-banner-title">サイトが更新されました</div>
+      ${changesList ? `<ul class="update-banner-list">${changesList}</ul>` : ""}
+    </div>
+    <button type="button" class="update-banner-close" id="updateBannerClose">&times;</button>`;
+  document.body.appendChild(banner);
+
+  requestAnimationFrame(() => banner.classList.add("show"));
+
+  const close = () => {
+    banner.classList.remove("show");
+    setTimeout(() => banner.remove(), 300);
+  };
+  document.getElementById("updateBannerClose").addEventListener("click", close);
+  setTimeout(close, 8000);
 }
 
 function recordAndShowVisitCount() {
@@ -1495,9 +1546,11 @@ function initSearchSuggest() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  migrateLikesIfNeeded();
   initSearchSuggest();
   renderSidebarSubs();
   recordAndShowVisitCount();
+  checkForFrontendUpdate();
   const ds = document.body.dataset;
   const page = ds.page;
   if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage();
