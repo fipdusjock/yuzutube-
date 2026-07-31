@@ -14,7 +14,8 @@ const ICONS = {
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
   chevronRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
-  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>'
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
+  playlistStack: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5h12v2H3zM3 9h12v2H3zM3 13h8v2H3zM17 9v9l6-4.5z"/></svg>'
 };
 
 function icon(name) {
@@ -24,6 +25,17 @@ function icon(name) {
 function escapeHtml(str) {
   if (str === null || str === undefined) return "";
   return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function linkifyText(str) {
+  // 概要欄のURLをYouTube本家と同じようにクリック可能なリンクにする。
+  // 先にHTMLエスケープしてから、URLパターンだけaタグに置き換える(XSS対策込み)。
+  const escaped = escapeHtml(str);
+  return escaped.replace(/(https?:\/\/[^\s<]+)/g, (url) => {
+    const trimmed = url.replace(/[.,)]+$/, "");
+    const trailing = url.slice(trimmed.length);
+    return `<a href="${trimmed}" target="_blank" rel="noopener noreferrer nofollow">${trimmed}</a>${trailing}`;
+  });
 }
 
 function truncateText(str, maxLen) {
@@ -198,7 +210,24 @@ function skeletonGridHTML(count) {
   }, skeletonCardHTML).join("");
 }
 
+function playlistCardHTML(e) {
+  const count = e.video_count ? `${e.video_count}本の動画` : "再生リスト";
+  return `\n    <a class="card playlist-card" href="/playlist?list=${encodeURIComponent(e.video_id)}">
+      <div class="thumb-wrap">
+        ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}
+        <span class="playlist-badge">${icon("playlistStack")}${escapeHtml(count)}</span>
+      </div>
+      <div class="meta">
+        <div style="flex:1;">
+          <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>
+          <div class="sub">再生リストの全体を見る</div>
+        </div>
+      </div>
+    </a>`;
+}
+
 function videoCardHTML(e, watchHref, options) {
+  if (e.entry_type === "playlist") return playlistCardHTML(e);
   const vertical = options && options.vertical;
   const isLive = e.live_status === "is_live";
   const badge = isLive ? `<span class="duration live-badge">LIVE</span>` : e.duration ? `<span class="duration">${escapeHtml(formatDuration(e.duration))}</span>` : "";
@@ -322,6 +351,10 @@ async function initWatchPage(videoId) {
   }).catch(e => showError(relatedBox, e.message));
   fetchJSON(`/proxy/comments/${encodeURIComponent(videoId)}?limit=30`).then(data => {
     const comments = data.comments || [];
+    const titleEl = document.getElementById("commentsTitle");
+    if (titleEl && data.comment_count_total) {
+      titleEl.textContent = `コメント ${Number(data.comment_count_total).toLocaleString()}`;
+    }
     commentsBox.innerHTML = comments.length ? comments.map(commentRowHTML).join("") : '<div class="empty-state">コメントはありません(またはコメント欄が無効です)</div>';
   }).catch(e => showError(commentsBox, e.message));
 }
@@ -337,7 +370,13 @@ function renderVideoInfo(box, info, videoId) {
   if (info.comment_count) stats.push(`<span class="stat-pill">${icon("comment")}${formatCountJa(info.comment_count)}</span>`);
   stats.push(`<button type="button" class="stat-pill" id="shareBtn">${icon("share")}共有</button>`);
   const chapters = (info.chapters || []).map(c => `<div class="chapter-row"><span class="ts">${escapeHtml(formatDuration(Math.floor(c.start_time || 0)))}</span><span>${escapeHtml(c.title || "")}</span></div>`).join("");
-  box.innerHTML = `\n    <div class="video-title">${escapeHtml(truncateText(info.title || "", 150))}</div>\n    <div class="video-meta-row">\n      <div class="video-owner">\n        <div class="avatar">${ownerAvatarHTML}</div>\n        <div class="video-owner-info">\n          <div class="name">${channelLink}</div>\n          ${info.channel_follower_count ? `<div class="subs">${formatCountJa(info.channel_follower_count)} 人の登録者</div>` : ""}\n        </div>\n      </div>\n      ${subscribeButtonHTML(info.channel_id, channelName, ownerAvatarSrc)}\n    </div>\n    <div class="video-stats-row">${stats.join("")}</div>\n    <div class="description-box" id="descriptionBox">\n      <div class="description-inner">\n        ${info.upload_date ? `<div class="top-line">${escapeHtml(formatUploadDate(info.upload_date))}</div>` : ""}\n        <div class="description-text">${escapeHtml(info.description || "(説明文なし)")}</div>\n        ${chapters ? `<div class="chapters"><div style="font-weight:600; margin-bottom:6px;">チャプター</div>${chapters}</div>` : ""}\n      </div>\n      <button type="button" class="desc-toggle-btn" id="descToggleBtn">もっと見る</button>\n    </div>`;
+  const descStatBoxes = `
+    <div class="desc-stat-grid">
+      ${info.like_count ? `<div class="desc-stat-box"><div class="desc-stat-num">${escapeHtml(formatCountJa(info.like_count))}</div><div class="desc-stat-label">高評価数</div></div>` : ""}
+      ${info.view_count ? `<div class="desc-stat-box"><div class="desc-stat-num">${escapeHtml(String(info.view_count).length > 9 ? formatCountJa(info.view_count) : Number(info.view_count).toLocaleString())}</div><div class="desc-stat-label">視聴回数</div></div>` : ""}
+      ${info.upload_date ? `<div class="desc-stat-box"><div class="desc-stat-num">${escapeHtml(formatUploadDate(info.upload_date))}</div><div class="desc-stat-label">投稿日</div></div>` : ""}
+    </div>`;
+  box.innerHTML = `\n    <div class="video-title">${escapeHtml(truncateText(info.title || "", 150))}</div>\n    <div class="video-meta-row">\n      <div class="video-owner">\n        <div class="avatar">${ownerAvatarHTML}</div>\n        <div class="video-owner-info">\n          <div class="name">${channelLink}</div>\n          ${info.channel_follower_count ? `<div class="subs">${formatCountJa(info.channel_follower_count)} 人の登録者</div>` : ""}\n        </div>\n      </div>\n      ${subscribeButtonHTML(info.channel_id, channelName, ownerAvatarSrc)}\n    </div>\n    <div class="video-stats-row">${stats.join("")}</div>\n    <div class="description-box" id="descriptionBox">\n      ${descStatBoxes}\n      <div class="description-inner">\n        <div class="description-text">${info.description ? linkifyText(info.description) : "(説明文なし)"}</div>\n        ${chapters ? `<div class="chapters"><div style="font-weight:600; margin-bottom:6px;">チャプター</div>${chapters}</div>` : ""}\n      </div>\n      <button type="button" class="desc-toggle-btn" id="descToggleBtn">もっと見る</button>\n    </div>`;
   const shareBtn = document.getElementById("shareBtn");
   if (shareBtn) {
     shareBtn.addEventListener("click", async () => {
@@ -362,7 +401,8 @@ function renderVideoInfo(box, info, videoId) {
   const descBox = box.querySelector("#descriptionBox");
   const descToggleBtn = box.querySelector("#descToggleBtn");
   if (descBox && descToggleBtn) {
-    descBox.addEventListener("click", () => {
+    descBox.addEventListener("click", (e) => {
+      if (e.target.closest("a")) return;
       const expanded = descBox.classList.toggle("expanded");
       descToggleBtn.textContent = expanded ? "閉じる" : "もっと見る";
     });
@@ -959,7 +999,53 @@ async function initChannelPage(channelId) {
     const bannerSrc = data.banner_base64 || data.banner;
     const bannerHTML = bannerSrc ? `<div class="channel-banner"><img src="${escapeHtml(bannerSrc)}" alt=""></div>` : "";
     const avatarHTML = avatarSrc ? `<img src="${escapeHtml(avatarSrc)}" alt="">` : escapeHtml((data.channel || "?")[0] || "?");
-    header.innerHTML = `\n      ${bannerHTML}\n      <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; flex-wrap:wrap;">\n        <div class="avatar" style="width:64px;height:64px;border-radius:50%;background:var(--bg-elevated);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:24px;">\n          ${avatarHTML}\n        </div>\n        <div style="flex:1;">\n          <div style="font-size:20px; font-weight:600;">${escapeHtml(data.channel || "")}</div>\n          ${data.channel_follower_count ? `<div style="color:var(--text-secondary); font-size:13px;">${formatCountJa(data.channel_follower_count)} 人の登録者</div>` : ""}\n        </div>\n        ${subscribeButtonHTML(channelId, data.channel, avatarSrc)}\n      </div>\n      ${data.description ? `<div class="description-box" style="margin-bottom:24px;">${escapeHtml(data.description)}</div>` : ""}`;
+    const metaParts = [];
+    if (data.channel_id) metaParts.push(`@${data.channel_id}`);
+    if (data.channel_follower_count) metaParts.push(`チャンネル登録者数 ${formatCountJa(data.channel_follower_count)}人`);
+    if (data.entry_count_total) metaParts.push(`${data.entry_count_total}本の動画`);
+
+    header.innerHTML = `
+      <div class="channel-header-top">
+        ${bannerHTML}
+        <div class="channel-identity">
+          <div class="channel-avatar-lg">${avatarHTML}</div>
+          <div class="channel-identity-body">
+            <div class="channel-name-row">
+              <span class="channel-name">${escapeHtml(data.channel || "")}</span>
+              <span class="channel-verified">${icon("check")}</span>
+            </div>
+            <div class="channel-meta-line">${escapeHtml(metaParts.join(" · "))}</div>
+            ${data.description ? `<div class="channel-desc-snippet" id="channelDescSnippet">${escapeHtml(data.description)}<button type="button" id="channelDescMoreBtn">…さらに表示</button></div>` : ""}
+          </div>
+          <div class="channel-subscribe-wrap">${subscribeButtonHTML(channelId, data.channel, avatarSrc)}</div>
+        </div>
+      </div>
+      <div class="channel-about-modal" id="channelAboutModal" hidden>
+        <div class="channel-about-backdrop" id="channelAboutBackdrop"></div>
+        <div class="channel-about-sheet">
+          <div class="channel-about-header">
+            <span class="channel-name">${escapeHtml(data.channel || "")}</span>
+            <button type="button" class="channel-about-close" id="channelAboutCloseBtn">${icon("chevronRight")}</button>
+          </div>
+          <div class="channel-about-section-title">説明</div>
+          <div class="channel-about-desc">${escapeHtml(data.description || "説明はありません")}</div>
+          <div class="channel-about-section-title">その他の情報</div>
+          <div class="channel-about-row">${escapeHtml(metaParts.join(" · "))}</div>
+        </div>
+      </div>`;
+
+    const descSnippet = document.getElementById("channelDescSnippet");
+    const descMoreBtn = document.getElementById("channelDescMoreBtn");
+    const aboutModal = document.getElementById("channelAboutModal");
+    function openAboutModal() { if (aboutModal) aboutModal.hidden = false; }
+    function closeAboutModal() { if (aboutModal) aboutModal.hidden = true; }
+    if (descMoreBtn) descMoreBtn.addEventListener("click", openAboutModal);
+    if (descSnippet) descSnippet.addEventListener("click", (e) => { if (e.target === descSnippet) openAboutModal(); });
+    const closeBtn = document.getElementById("channelAboutCloseBtn");
+    if (closeBtn) closeBtn.addEventListener("click", closeAboutModal);
+    const backdrop = document.getElementById("channelAboutBackdrop");
+    if (backdrop) backdrop.addEventListener("click", closeAboutModal);
+
     renderTabs(data.available_tabs);
     const entries = data.entries || [];
     offset = entries.length;
@@ -1085,6 +1171,51 @@ function toggleSidebar() {
   if (sidebar) sidebar.classList.toggle("open");
 }
 
+function renderSidebarSubs() {
+  const box = document.getElementById("sidebarSubs");
+  if (!box) return;
+  const subs = getJSON(SUBS_KEY, []);
+  const emptyHint = document.getElementById("sidebarSubsEmpty");
+  const moreBtn = document.getElementById("sidebarSubsMoreBtn");
+  const allLink = document.getElementById("sidebarSubsAllLink");
+  const SIDEBAR_SUBS_LIMIT = 8;
+
+  if (!subs.length) {
+    box.innerHTML = "";
+    if (emptyHint) emptyHint.style.display = "block";
+    if (moreBtn) moreBtn.hidden = true;
+    if (allLink) allLink.hidden = true;
+    return;
+  }
+  if (emptyHint) emptyHint.style.display = "none";
+
+  function itemHTML(s) {
+    const avatarHTML = s.channel_thumb
+      ? `<img src="${escapeHtml(s.channel_thumb)}" alt="" loading="lazy">`
+      : escapeHtml((s.channel_name || "?")[0] || "?");
+    return `<a class="item sidebar-sub-item" href="/channel/${encodeURIComponent(s.channel_id)}">
+      <span class="sidebar-sub-avatar">${avatarHTML}</span>
+      <span class="label">${escapeHtml(s.channel_name || "")}</span>
+    </a>`;
+  }
+
+  let expanded = false;
+  function render() {
+    const shown = expanded ? subs : subs.slice(0, SIDEBAR_SUBS_LIMIT);
+    box.innerHTML = shown.map(itemHTML).join("");
+    if (moreBtn) moreBtn.hidden = expanded || subs.length <= SIDEBAR_SUBS_LIMIT;
+    if (allLink) allLink.hidden = false;
+  }
+  render();
+
+  if (moreBtn) {
+    moreBtn.onclick = () => {
+      expanded = true;
+      render();
+    };
+  }
+}
+
 function initSearchSuggest() {
   const input = document.getElementById("searchInput");
   const box = document.getElementById("searchSuggest");
@@ -1166,6 +1297,7 @@ function initSearchSuggest() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initSearchSuggest();
+  renderSidebarSubs();
   const ds = document.body.dataset;
   const page = ds.page;
   if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage();
