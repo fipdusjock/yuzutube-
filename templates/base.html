@@ -37,15 +37,26 @@
         <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v10h5v-6h2v6h5V10"/></svg></span>
         <span class="label">ホーム</span>
       </a>
-      <a class="item {{ 'active' if request.path == '/subscriptions' else '' }}" href="/subscriptions">
-        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path fill="currentColor" stroke="none" d="M10.3 9.3v5.4l4.7-2.7z"/></svg></span>
-        <span class="label">登録チャンネル</span>
-      </a>
       <a class="item {{ 'active' if request.path == '/history' else '' }}" href="/history">
         <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3"/><path d="M3 4.5v4.2h4.2"/><path d="M12 7.5V12l3 2"/></svg></span>
         <span class="label">視聴履歴</span>
       </a>
       <hr>
+
+      <div class="sidebar-section-title">登録チャンネル</div>
+      <div id="sidebarSubs"></div>
+      <button type="button" class="item sidebar-more-btn" id="sidebarSubsMoreBtn" hidden>
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        <span class="label">もっと見る</span>
+      </button>
+      <a class="item {{ 'active' if request.path == '/subscriptions' else '' }}" href="/subscriptions" id="sidebarSubsAllLink" hidden>
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path fill="currentColor" stroke="none" d="M10.3 9.3v5.4l4.7-2.7z"/></svg></span>
+        <span class="label">すべて見る</span>
+      </a>
+      <div class="sidebar-empty-hint" id="sidebarSubsEmpty">登録チャンネルはまだありません</div>
+      <hr>
+
+      <div class="sidebar-section-title">マイページ</div>
       <a class="item {{ 'active' if request.path == '/settings' else '' }}" href="/settings">
         <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg></span>
         <span class="label">設定</span>
