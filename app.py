@@ -1,3 +1,18 @@
+"""
+Tubely (ytdlp_frontend) - ytdlp_apiを叩いて、YouTubeに寄せた見た目で
+検索・視聴・関連動画・コメントを表示するフロントエンド。
+
+ページ自体は即座に返す(スケルトン状態のHTML)。中身のデータはブラウザ側のJSが
+このFlaskアプリの /proxy/* を叩いて取りに行き、後から差し込む方式にしてある。
+こうしておくと:
+  - バックエンド(ytdlp_api)が重い/落ちてても最初の画面表示だけは即座に出る
+  - スケルトンローディング(灰色のプレースホルダーが後から本物に置き換わる演出)ができる
+  - /proxy/* はこのサーバー自身が叩くのでCORSを一切気にしなくていい
+
+サイト名は "Tubely" にしてある(YouTube本家と誤認されないように、あえて別名にしてある)。
+SITE_NAME環境変数で好きな名前に変更可能。
+"""
+
 import os
 import json
 import re
@@ -13,6 +28,10 @@ SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
 PROXY_TIMEOUT = 60
+# バックエンドへのリクエストにブラウザっぽいUser-Agentを付ける。
+# 素のPython requestsのUA(python-requests/x.x)のままだと、yuzu3da.comのように
+# Cloudflareの本物のゾーン(Bot対策付き)に乗っているドメインでは403でブロック
+# されることがあったための対応。
 _BACKEND_REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -27,7 +46,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -256,6 +275,11 @@ def subscriptions():
     return render_template("subscriptions.html")
 
 
+@app.route("/liked")
+def liked_videos():
+    return render_template("liked.html")
+
+
 @app.route("/history")
 def history():
     return render_template("history.html")
@@ -374,6 +398,38 @@ def proxy_trending():
 @app.route("/proxy/visit", methods=["GET", "POST"])
 def proxy_visit():
     return _proxy("/api/visit", method=request.method)
+
+
+@app.route("/proxy/history", methods=["GET", "POST", "DELETE"])
+def proxy_history():
+    """
+    アカウントに紐づく視聴履歴の中継。ログインしていない場合は何もしない
+    (ローカルの視聴履歴 /history とは別物で、こちらはアカウントに同期される)。
+    emailはブラウザ側から送らせず、サーバー側で検証済みのセッションから取得する
+    (他人のemailを指定してhistoryを読み書きできてしまわないようにするため)。
+    """
+    email = _current_user_email()
+    if not email:
+        return jsonify({"error": True, "message": "ログインが必要です"}), 401
+
+    api_base = _resolve_api_base()
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()}
+
+    if request.method == "GET":
+        limit = request.args.get("limit", "100")
+        resp = requests.get(f"{api_base}/api/history", params={"email": email, "limit": limit}, headers=headers, timeout=PROXY_TIMEOUT)
+    elif request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        body["email"] = email
+        resp = requests.post(f"{api_base}/api/history", json=body, headers=headers, timeout=PROXY_TIMEOUT)
+    else:
+        resp = requests.delete(f"{api_base}/api/history", json={"email": email}, headers=headers, timeout=PROXY_TIMEOUT)
+
+    try:
+        data = resp.json()
+    except ValueError:
+        return jsonify({"error": True, "message": f"サーバーの応答が不正です (HTTP {resp.status_code})"}), resp.status_code
+    return jsonify(data), resp.status_code
 
 
 @app.route("/proxy/search")
