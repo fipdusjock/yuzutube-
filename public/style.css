@@ -942,6 +942,7 @@ main.content {
   align-items: flex-end;
   justify-content: center;
 }
+.channel-about-modal[hidden] { display: none; }
 @media (min-width: 701px) {
   .channel-about-modal { align-items: center; }
 }

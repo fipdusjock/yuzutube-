@@ -1190,12 +1190,12 @@ function renderSidebarSubs() {
   if (emptyHint) emptyHint.style.display = "none";
 
   function itemHTML(s) {
-    const avatarHTML = s.channel_thumb
-      ? `<img src="${escapeHtml(s.channel_thumb)}" alt="" loading="lazy">`
-      : escapeHtml((s.channel_name || "?")[0] || "?");
+    const avatarHTML = s.thumbnail
+      ? `<img src="${escapeHtml(s.thumbnail)}" alt="" loading="lazy">`
+      : escapeHtml((s.channel || "?")[0] || "?");
     return `<a class="item sidebar-sub-item" href="/channel/${encodeURIComponent(s.channel_id)}">
       <span class="sidebar-sub-avatar">${avatarHTML}</span>
-      <span class="label">${escapeHtml(s.channel_name || "")}</span>
+      <span class="label">${escapeHtml(s.channel || "")}</span>
     </a>`;
   }
 
