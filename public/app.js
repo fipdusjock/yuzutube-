@@ -687,6 +687,46 @@ function renderPlayer(wrap, stream, info) {
   let currentTrackEl = null;
   let currentFormatId = defaultQuality ? defaultQuality.format_id : null;
 
+  // iOS Safariは<a download>属性をほぼ無視する(タップすると別タブで開くだけで
+  // 保存されない)ため、fetchでBlobとして取得してから保存させる方式に切り替える。
+  // 他のブラウザでもこの方式は問題なく動くので、iOS判定はせず常にこちらを使う。
+  if (downloadLink) {
+    downloadLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      const url = downloadLink.href;
+      const originalText = downloadLink.textContent;
+      downloadLink.textContent = "ダウンロード準備中…";
+      downloadLink.style.pointerEvents = "none";
+      fetch(url)
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const contentDisposition = res.headers.get("Content-Disposition") || "";
+          const match = contentDisposition.match(/filename="?([^";]+)"?/);
+          const filename = match ? match[1] : `${videoId}.mp4`;
+          return res.blob().then((blob) => ({ blob, filename }));
+        })
+        .then(({ blob, filename }) => {
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = blobUrl;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        })
+        .catch(() => {
+          // Blob方式が何らかの理由で失敗した場合は、素直に新しいタブで開く
+          // (それでも保存できないブラウザも一部あるが、最低限視聴はできる)
+          window.open(url, "_blank");
+        })
+        .finally(() => {
+          downloadLink.textContent = originalText;
+          downloadLink.style.pointerEvents = "";
+        });
+    });
+  }
+
   function showPanel(name) {
     settingsMenu.querySelectorAll(".settings-panel").forEach(p => {
       p.hidden = p.dataset.panel !== name;
