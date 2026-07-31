@@ -1,18 +1,3 @@
-"""
-Tubely (ytdlp_frontend) - ytdlp_apiを叩いて、YouTubeに寄せた見た目で
-検索・視聴・関連動画・コメントを表示するフロントエンド。
-
-ページ自体は即座に返す(スケルトン状態のHTML)。中身のデータはブラウザ側のJSが
-このFlaskアプリの /proxy/* を叩いて取りに行き、後から差し込む方式にしてある。
-こうしておくと:
-  - バックエンド(ytdlp_api)が重い/落ちてても最初の画面表示だけは即座に出る
-  - スケルトンローディング(灰色のプレースホルダーが後から本物に置き換わる演出)ができる
-  - /proxy/* はこのサーバー自身が叩くのでCORSを一切気にしなくていい
-
-サイト名は "Tubely" にしてある(YouTube本家と誤認されないように、あえて別名にしてある)。
-SITE_NAME環境変数で好きな名前に変更可能。
-"""
-
 import os
 import json
 import re
@@ -46,7 +31,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
 
 
 def _backend_auth_headers():
