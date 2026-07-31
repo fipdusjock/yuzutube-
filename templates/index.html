@@ -2,6 +2,14 @@
 {% block title %}{{ site_name }}{% endblock %}
 {% block page_id %}index{% endblock %}
 {% block content %}
+<div class="trending-header">
+  <div class="trending-tabs" id="trendingTabs">
+    <button type="button" class="trending-tab-btn active" data-category="trending">急上昇</button>
+    <button type="button" class="trending-tab-btn" data-category="music">音楽</button>
+    <button type="button" class="trending-tab-btn" data-category="gaming">ゲーム</button>
+  </div>
+  <div class="trending-updated" id="trendingUpdated"></div>
+</div>
 <div class="grid" id="trendingGrid">
   {% for _ in range(12) %}
   <div class="card sk-card">
