@@ -350,10 +350,14 @@ async function initWatchPage(videoId) {
   const playerWrap = document.getElementById("playerWrap");
   const liveChatPanel = document.getElementById("liveChatPanel");
   const liveChatBox = document.getElementById("liveChatBox");
-  const infoPromise = fetchJSON(`/proxy/info/${encodeURIComponent(videoId)}`);
+  // 以前は /api/info と /api/stream を毎回両方叩いていたが、バックエンド側が
+  // /api/stream の中にinfo相当の情報も含めて返すようになったため、1回で済ませられる
+  // (yt-dlp側の重い抽出処理・Node.jsでの署名解読が動画1本につき2回走っていたのを
+  // 1回に減らせる)。
   const streamPromise = fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`);
   try {
-    const [info, stream] = await Promise.all([ infoPromise, streamPromise ]);
+    const stream = await streamPromise;
+    const info = stream;
     renderVideoInfo(infoBox, info, videoId);
     renderPlayer(playerWrap, stream, info);
     document.title = info.title ? `${info.title} - ${document.title.split(" - ").pop()}` : document.title;
@@ -1205,6 +1209,22 @@ function toggleSidebar() {
   if (sidebar) sidebar.classList.toggle("open");
 }
 
+function recordAndShowVisitCount() {
+  const box = document.getElementById("sidebarVisitCount");
+  // 記録は毎回のページ表示で行う(タブを開くたびに+1、YouTube本家の再生回数のような
+  // 厳密な重複排除はしていない、あくまで参考程度のシンプルなカウンター)。
+  fetch("/proxy/visit", { method: "POST" })
+    .then((res) => res.json())
+    .then((data) => {
+      if (box && typeof data.total === "number") {
+        box.textContent = `累計閲覧数: ${data.total.toLocaleString()}`;
+      }
+    })
+    .catch(() => {
+      // 表示できなくても致命的ではないので静かに無視する
+    });
+}
+
 function renderSidebarSubs() {
   const box = document.getElementById("sidebarSubs");
   if (!box) return;
@@ -1332,7 +1352,16 @@ function initSearchSuggest() {
 document.addEventListener("DOMContentLoaded", () => {
   initSearchSuggest();
   renderSidebarSubs();
+  recordAndShowVisitCount();
   const ds = document.body.dataset;
   const page = ds.page;
   if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage();
 });
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // 対応していない/失敗しても、通常のWebサイトとしては問題なく動くので無視する
+    });
+  });
+}
