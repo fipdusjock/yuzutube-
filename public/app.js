@@ -247,13 +247,47 @@ function commentRowHTML(c) {
 
 async function initIndexPage() {
   const grid = document.getElementById("trendingGrid");
-  try {
-    const data = await fetchJSON("/proxy/trending?limit=24");
-    const entries = data.entries || [];
-    grid.innerHTML = entries.length ? entries.map(e => videoCardHTML(e, `/watch?v=${encodeURIComponent(e.video_id)}`)).join("") : '<div class="empty-state">動画が見つかりませんでした。</div>';
-  } catch (e) {
-    showError(grid.parentElement, e.message);
+  const updatedBox = document.getElementById("trendingUpdated");
+  const tabsBox = document.getElementById("trendingTabs");
+  let currentCategory = "trending";
+
+  function formatUpdated(isoString) {
+    if (!isoString) return "";
+    const updatedAt = new Date(isoString);
+    const diffMin = Math.floor((Date.now() - updatedAt.getTime()) / 60000);
+    if (diffMin < 1) return "更新中…";
+    if (diffMin < 60) return `${diffMin}分前に更新`;
+    const diffHour = Math.floor(diffMin / 60);
+    return `${diffHour}時間前に更新`;
   }
+
+  async function load() {
+    grid.innerHTML = skeletonGridHTML(12);
+    if (updatedBox) updatedBox.textContent = "更新中…";
+    try {
+      const data = await fetchJSON(`/proxy/trending?limit=24&category=${encodeURIComponent(currentCategory)}`);
+      const entries = data.entries || [];
+      grid.innerHTML = entries.length ? entries.map(e => videoCardHTML(e, `/watch?v=${encodeURIComponent(e.video_id)}`)).join("") : '<div class="empty-state">動画が見つかりませんでした。</div>';
+      if (updatedBox) updatedBox.textContent = formatUpdated(data.updated);
+    } catch (e) {
+      showError(grid.parentElement, e.message);
+      if (updatedBox) updatedBox.textContent = "";
+    }
+  }
+
+  if (tabsBox) {
+    tabsBox.querySelectorAll(".trending-tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.category === currentCategory) return;
+        tabsBox.querySelectorAll(".trending-tab-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentCategory = btn.dataset.category;
+        load();
+      });
+    });
+  }
+
+  load();
 }
 
 function setupInfiniteScroll(sentinelParent, onIntersect) {
