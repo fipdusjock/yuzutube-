@@ -13,10 +13,6 @@ SITE_NAME = os.environ.get("SITE_NAME", "yuzutube")
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
 PROXY_TIMEOUT = 60
-# バックエンドへのリクエストにブラウザっぽいUser-Agentを付ける。
-# 素のPython requestsのUA(python-requests/x.x)のままだと、yuzu3da.comのように
-# Cloudflareの本物のゾーン(Bot対策付き)に乗っているドメインでは403でブロック
-# されることがあったための対応。
 _BACKEND_REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
