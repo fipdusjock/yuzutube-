@@ -1,3 +1,15 @@
+"""
+ytdlp_frontend - ytdlp_apiを叩いて、YouTubeに寄せた見た目で
+検索・視聴・関連動画・コメントを表示するフロントエンド。
+
+ページ自体は即座に返す(スケルトン状態のHTML)。中身のデータはブラウザ側のJSが
+このFlaskアプリの /proxy/* を叩いて取りに行き、後から差し込む方式にしてある。
+こうしておくと:
+  - バックエンド(ytdlp_api)が重い/落ちてても最初の画面表示だけは即座に出る
+  - スケルトンローディング(灰色のプレースホルダーが後から本物に置き換わる演出)ができる
+  - /proxy/* はこのサーバー自身が叩くのでCORSを一切気にしなくていい
+"""
+
 import os
 import json
 import re
@@ -31,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -430,6 +442,53 @@ def proxy_history():
     except ValueError:
         return jsonify({"error": True, "message": f"サーバーの応答が不正です (HTTP {resp.status_code})"}), resp.status_code
     return jsonify(data), resp.status_code
+
+
+def _proxy_user_api(path, method="GET", json_body=None):
+    token = request.cookies.get(SESSION_COOKIE_NAME, "")
+    if not token:
+        return jsonify({"error": True, "message": "ログインが必要です"}), 401
+
+    api_base = _resolve_api_base()
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Session-Token": token}
+    url = f"{api_base}{path}"
+
+    if method == "GET":
+        resp = requests.get(url, headers=headers, timeout=PROXY_TIMEOUT)
+    elif method == "POST":
+        resp = requests.post(url, json=json_body, headers=headers, timeout=PROXY_TIMEOUT)
+    else:
+        resp = requests.delete(url, headers=headers, timeout=PROXY_TIMEOUT)
+
+    try:
+        data = resp.json()
+    except ValueError:
+        return jsonify({"error": True, "message": f"サーバーの応答が不正です (HTTP {resp.status_code})"}), resp.status_code
+    return jsonify(data), resp.status_code
+
+
+@app.route("/proxy/user/subscriptions", methods=["GET", "POST"])
+def proxy_user_subscriptions():
+    if request.method == "GET":
+        return _proxy_user_api("/api/user/subscriptions")
+    return _proxy_user_api("/api/user/subscriptions", "POST", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/user/subscriptions/<channel_id>", methods=["DELETE"])
+def proxy_user_subscription_delete(channel_id):
+    return _proxy_user_api(f"/api/user/subscriptions/{channel_id}", "DELETE")
+
+
+@app.route("/proxy/user/likes", methods=["GET", "POST"])
+def proxy_user_likes():
+    if request.method == "GET":
+        return _proxy_user_api("/api/user/likes")
+    return _proxy_user_api("/api/user/likes", "POST", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/user/likes/<video_id>", methods=["DELETE"])
+def proxy_user_like_delete(video_id):
+    return _proxy_user_api(f"/api/user/likes/{video_id}", "DELETE")
 
 
 @app.route("/proxy/search")
