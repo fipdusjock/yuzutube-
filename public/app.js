@@ -206,7 +206,7 @@ function likeButtonHTML(videoId, likeCount, meta) {
   return `<button class="stat-pill like-btn ${liked ? "active" : ""}" data-action="toggle-like"\n    data-video-id="${escapeHtml(videoId)}"\n    data-title="${escapeHtml(m.title || "")}"\n    data-thumbnail="${escapeHtml(m.thumbnail || "")}"\n    data-channel="${escapeHtml(m.channel || "")}"\n    data-duration="${escapeHtml(m.duration || "")}">\n    ${icon("thumbsUp")}${countText}\n  </button>`;
 }
 
-document.addEventListener("click", e => {
+document.addEventListener("pointerup", e => {
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
   if (btn.dataset.action === "toggle-subscribe") {
