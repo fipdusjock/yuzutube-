@@ -147,6 +147,7 @@ function toggleSubscribe(channelId, meta) {
   if (idx >= 0) {
     subs.splice(idx, 1);
     setJSON(SUBS_KEY, subs);
+    fetch(`/proxy/user/subscriptions/${encodeURIComponent(channelId)}`, { method: "DELETE" }).catch(() => {});
     return false;
   }
   subs.unshift({
@@ -155,6 +156,11 @@ function toggleSubscribe(channelId, meta) {
     thumbnail: meta.thumbnail || ""
   });
   setJSON(SUBS_KEY, subs);
+  fetch("/proxy/user/subscriptions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel_id: channelId, channel: meta.channel || "", thumbnail: meta.thumbnail || "" }),
+  }).catch(() => {});
   return true;
 }
 
@@ -168,6 +174,7 @@ function toggleLike(videoId, meta) {
   if (idx >= 0) {
     likes.splice(idx, 1);
     setJSON(LIKES_KEY, likes);
+    fetch(`/proxy/user/likes/${encodeURIComponent(videoId)}`, { method: "DELETE" }).catch(() => {});
     return false;
   }
   likes.unshift({
@@ -179,6 +186,17 @@ function toggleLike(videoId, meta) {
     liked_at: Date.now(),
   });
   setJSON(LIKES_KEY, likes);
+  fetch("/proxy/user/likes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      video_id: videoId,
+      title: (meta && meta.title) || "",
+      thumbnail: (meta && meta.thumbnail) || "",
+      channel: (meta && meta.channel) || "",
+      duration: (meta && meta.duration) || null,
+    }),
+  }).catch(() => {});
   return true;
 }
 
@@ -203,7 +221,8 @@ function likeButtonHTML(videoId, likeCount, meta) {
   const liked = isLiked(videoId);
   const countText = likeCount ? formatCountJa(likeCount) : "";
   const m = meta || {};
-  return `<button class="stat-pill like-btn ${liked ? "active" : ""}" data-action="toggle-like"\n    data-video-id="${escapeHtml(videoId)}"\n    data-title="${escapeHtml(m.title || "")}"\n    data-thumbnail="${escapeHtml(m.thumbnail || "")}"\n    data-channel="${escapeHtml(m.channel || "")}"\n    data-duration="${escapeHtml(m.duration || "")}">\n    ${icon("thumbsUp")}${countText}\n  </button>`;
+  const activeStyle = liked ? "color:#065fd4;" : "";
+  return `<button class="stat-pill like-btn ${liked ? "active" : ""}" data-action="toggle-like" style="${activeStyle}"\n    data-video-id="${escapeHtml(videoId)}"\n    data-title="${escapeHtml(m.title || "")}"\n    data-thumbnail="${escapeHtml(m.thumbnail || "")}"\n    data-channel="${escapeHtml(m.channel || "")}"\n    data-duration="${escapeHtml(m.duration || "")}">\n    ${icon("thumbsUp")}${countText}\n  </button>`;
 }
 
 document.addEventListener("pointerup", e => {
@@ -225,6 +244,7 @@ document.addEventListener("pointerup", e => {
       duration: btn.dataset.duration ? Number(btn.dataset.duration) : null,
     });
     btn.classList.toggle("active", nowLiked);
+    btn.style.color = nowLiked ? "#065fd4" : "";
   }
 });
 
