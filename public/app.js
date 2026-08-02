@@ -141,13 +141,29 @@ function isSubscribed(channelId) {
   return getJSON(SUBS_KEY, []).some(s => s.channel_id === channelId);
 }
 
+function syncToAccount(url, options) {
+  fetch(url, options)
+    .then((res) => {
+      if (!res.ok) {
+        return res.json().then((data) => {
+          console.warn(`アカウント同期に失敗しました (${url}):`, data.message || res.status);
+        }).catch(() => {
+          console.warn(`アカウント同期に失敗しました (${url}): HTTP ${res.status}`);
+        });
+      }
+    })
+    .catch((e) => {
+      console.warn(`アカウント同期リクエスト自体が失敗しました (${url}):`, e.message);
+    });
+}
+
 function toggleSubscribe(channelId, meta) {
   const subs = getJSON(SUBS_KEY, []);
   const idx = subs.findIndex(s => s.channel_id === channelId);
   if (idx >= 0) {
     subs.splice(idx, 1);
     setJSON(SUBS_KEY, subs);
-    fetch(`/proxy/user/subscriptions/${encodeURIComponent(channelId)}`, { method: "DELETE" }).catch(() => {});
+    syncToAccount(`/proxy/user/subscriptions/${encodeURIComponent(channelId)}`, { method: "DELETE" });
     return false;
   }
   subs.unshift({
@@ -156,11 +172,11 @@ function toggleSubscribe(channelId, meta) {
     thumbnail: meta.thumbnail || ""
   });
   setJSON(SUBS_KEY, subs);
-  fetch("/proxy/user/subscriptions", {
+  syncToAccount("/proxy/user/subscriptions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ channel_id: channelId, channel: meta.channel || "", thumbnail: meta.thumbnail || "" }),
-  }).catch(() => {});
+  });
   return true;
 }
 
@@ -174,7 +190,7 @@ function toggleLike(videoId, meta) {
   if (idx >= 0) {
     likes.splice(idx, 1);
     setJSON(LIKES_KEY, likes);
-    fetch(`/proxy/user/likes/${encodeURIComponent(videoId)}`, { method: "DELETE" }).catch(() => {});
+    syncToAccount(`/proxy/user/likes/${encodeURIComponent(videoId)}`, { method: "DELETE" });
     return false;
   }
   likes.unshift({
@@ -186,7 +202,7 @@ function toggleLike(videoId, meta) {
     liked_at: Date.now(),
   });
   setJSON(LIKES_KEY, likes);
-  fetch("/proxy/user/likes", {
+  syncToAccount("/proxy/user/likes", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -196,7 +212,7 @@ function toggleLike(videoId, meta) {
       channel: (meta && meta.channel) || "",
       duration: (meta && meta.duration) || null,
     }),
-  }).catch(() => {});
+  });
   return true;
 }
 
