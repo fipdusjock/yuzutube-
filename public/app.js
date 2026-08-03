@@ -77,6 +77,7 @@ function formatUploadDate(dateStr) {
 }
 
 const API_BASE_KEY = "tubely_api_base";
+const USE_NOCOOKIE_EMBED_KEY = "tubely_use_nocookie_embed";
 
 function apiBaseQueryParam() {
   const override = localStorage.getItem(API_BASE_KEY);
@@ -418,12 +419,17 @@ async function initWatchPage(videoId) {
   // /api/stream の中にinfo相当の情報も含めて返すようになったため、1回で済ませられる
   // (yt-dlp側の重い抽出処理・Node.jsでの署名解読が動画1本につき2回走っていたのを
   // 1回に減らせる)。
+  const useNocookieEmbed = localStorage.getItem(USE_NOCOOKIE_EMBED_KEY) === "1";
   const streamPromise = fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`);
   try {
     const stream = await streamPromise;
     const info = stream;
     renderVideoInfo(infoBox, info, videoId);
-    renderPlayer(playerWrap, stream, info);
+    if (useNocookieEmbed) {
+      renderNocookieEmbed(playerWrap, videoId);
+    } else {
+      renderPlayer(playerWrap, stream, info);
+    }
     document.title = info.title ? `${info.title} - ${document.title.split(" - ").pop()}` : document.title;
     addHistory({
       video_id: videoId,
@@ -458,8 +464,13 @@ async function initWatchPage(videoId) {
       });
     }
   } catch (e) {
-    showError(infoBox, e.message);
-    playerWrap.innerHTML = `<div class="player-fallback">${escapeHtml(e.message)}</div>`;
+    if (useNocookieEmbed) {
+      renderNocookieEmbed(playerWrap, videoId);
+      showError(infoBox, `動画の詳細情報は取得できませんでしたが、再生だけは試せます: ${e.message}`);
+    } else {
+      showError(infoBox, e.message);
+      playerWrap.innerHTML = `<div class="player-fallback">${escapeHtml(e.message)}</div>`;
+    }
   }
   fetchJSON(`/proxy/related/${encodeURIComponent(videoId)}?limit=15`).then(data => {
     const entries = data.entries || [];
@@ -532,6 +543,19 @@ function renderVideoInfo(box, info, videoId) {
 
 function mediaProxyUrl(videoId, formatId) {
   return `/media/${encodeURIComponent(videoId)}?format_id=${encodeURIComponent(formatId)}`;
+}
+
+function renderNocookieEmbed(wrap, videoId) {
+  wrap.innerHTML = `
+    <div class="nocookie-player">
+      <iframe
+        src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0"
+        title="YouTube video player"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allowfullscreen></iframe>
+    </div>`;
 }
 
 function renderPlayer(wrap, stream, info) {
@@ -1366,6 +1390,14 @@ function initSettingsPage() {
   const clearBtn = document.getElementById("clearLocalData");
   const clearStatus = document.getElementById("clearStatus");
   input.value = localStorage.getItem(API_BASE_KEY) || "";
+
+  const nocookieToggle = document.getElementById("useNocookieEmbed");
+  if (nocookieToggle) {
+    nocookieToggle.checked = localStorage.getItem(USE_NOCOOKIE_EMBED_KEY) === "1";
+    nocookieToggle.addEventListener("change", () => {
+      localStorage.setItem(USE_NOCOOKIE_EMBED_KEY, nocookieToggle.checked ? "1" : "0");
+    });
+  }
   saveBtn.addEventListener("click", () => {
     const val = input.value.trim();
     if (val) {
