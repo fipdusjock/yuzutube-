@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -288,6 +288,27 @@ def frontend_version():
     })
 
 
+@app.get("/api/announcement")
+def announcement():
+    """
+    画面中央にモーダルで出す「アップデート予告」。announcement.jsonを直接編集するだけで
+    内容を変えられる(コード修正不要)。idを新しい値に変えると、既に見た人にも
+    再度表示される(idが変わっていなければ、一度閉じた人には出ない)。
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "announcement.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    return jsonify({
+        "id": data.get("id", ""),
+        "enabled": bool(data.get("enabled", False)),
+        "title": data.get("title", ""),
+        "message": data.get("message", ""),
+    })
+
+
 @app.route("/subscriptions")
 def subscriptions():
     return render_template("subscriptions.html")
@@ -317,7 +338,7 @@ SESSION_MAX_AGE = 7 * 24 * 3600  # 1週間
 _AUTH_EXEMPT_PATHS = {
     "/login", "/signup", "/logout", "/style.css", "/app.js", "/auth.css", "/favicon.ico",
     "/favicon.svg", "/favicon-16.png", "/favicon-32.png", "/manifest.json", "/sw.js",
-    "/api/auth/login", "/api/auth/signup", "/changelog", "/api/frontend-version",
+    "/api/auth/login", "/api/auth/signup", "/changelog", "/api/frontend-version", "/api/announcement",
 }
 _AUTH_EXEMPT_PREFIXES = ("/icons/",)
 
