@@ -1,6 +1,6 @@
 {
-  "id": "",
-  "enabled": false,
-  "title": "アップデート予告",
-  "message": ""
+  "id": "2026-08-04-maintenance",
+  "enabled": true,
+  "title": "メンテナンスのお知らせ",
+  "message": "8/4　10時00分~11時00分　プレイリストのサムネイルが表示されないのを直します"
 }
