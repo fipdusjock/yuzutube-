@@ -1458,6 +1458,44 @@ function toggleSidebar() {
 
 const UPDATE_VERSION_SEEN_KEY = "tubely_last_seen_version";
 
+const ANNOUNCEMENT_SEEN_KEY = "tubely_announcement_seen_id";
+
+function checkForAnnouncement() {
+  fetch("/api/announcement")
+    .then((res) => res.json())
+    .then((data) => {
+      if (!data.enabled || !data.id) return;
+      const seen = localStorage.getItem(ANNOUNCEMENT_SEEN_KEY);
+      if (seen === data.id) return;
+      showAnnouncementModal(data);
+    })
+    .catch(() => {});
+}
+
+function showAnnouncementModal(data) {
+  const existing = document.getElementById("announcementModal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "announcementModal";
+  modal.className = "announcement-modal";
+  modal.innerHTML = `
+    <div class="announcement-backdrop" id="announcementBackdrop"></div>
+    <div class="announcement-box">
+      <div class="announcement-title">${escapeHtml(data.title || "アップデート予告")}</div>
+      <div class="announcement-message">${escapeHtml(data.message || "")}</div>
+      <button type="button" class="announcement-close-btn" id="announcementCloseBtn">閉じる</button>
+    </div>`;
+  document.body.appendChild(modal);
+
+  const dismiss = () => {
+    localStorage.setItem(ANNOUNCEMENT_SEEN_KEY, data.id);
+    modal.remove();
+  };
+  document.getElementById("announcementCloseBtn").addEventListener("click", dismiss);
+  document.getElementById("announcementBackdrop").addEventListener("click", dismiss);
+}
+
 function checkForFrontendUpdate() {
   fetch("/api/frontend-version")
     .then((res) => res.json())
@@ -1649,6 +1687,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderSidebarSubs();
   recordAndShowVisitCount();
   checkForFrontendUpdate();
+  checkForAnnouncement();
   const ds = document.body.dataset;
   const page = ds.page;
   if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage();
