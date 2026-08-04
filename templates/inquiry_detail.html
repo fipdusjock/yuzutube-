@@ -3,8 +3,11 @@
 {% block page_id %}inquiry_detail{% endblock %}
 {% block body_data %}data-inquiry-id="{{ inquiry_id }}"{% endblock %}
 {% block content %}
-<h1 class="section-title" id="inquirySubjectTitle">お問い合わせ</h1>
-<div id="inquiryThread" class="inquiry-thread"></div>
+<div class="inquiry-detail-header">
+  <h1 class="section-title" id="inquirySubjectTitle">お問い合わせ</h1>
+  <button type="button" class="page-settings-btn danger" id="inquiryDeleteBtn" hidden>削除</button>
+</div>
+<div id="inquiryThread" class="inquiry-thread inquiry-thread-chat"></div>
 
 <div class="page-settings-group" style="margin-top:16px;">
   <div class="page-settings-card">
