@@ -800,7 +800,11 @@ main.content {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  color: var(--text);
+  border: none;
+  font-family: inherit;
 }
+button.stat-pill { cursor: pointer; }
 .stat-pill .icon { width: 16px; height: 16px; }
 
 .description-box {
@@ -1274,7 +1278,7 @@ main.content {
   border: 1px solid var(--border);
 }
 
-.like-btn { cursor: pointer; border: none; }
+.like-btn { cursor: pointer; border: none; color: var(--text); }
 .like-btn.active { color: var(--accent); }
 .like-btn.active .icon svg { fill: var(--accent); }
 
