@@ -302,6 +302,10 @@ function videoCardHTML(e, watchHref, options) {
 }
 
 function relatedCardHTML(e) {
+  if (e.entry_type === "playlist") {
+    const count = e.video_count ? `${e.video_count}本の動画` : "再生リスト";
+    return `\n    <a class="related-card" href="/playlist?list=${encodeURIComponent(e.video_id)}">\n      <div class="thumb-wrap" style="width:168px;">\n        ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}\n        <span class="playlist-badge">${icon("playlistStack")}${escapeHtml(count)}</span>\n      </div>\n      <div>\n        <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>\n        <div class="sub">再生リストの全体を見る</div>\n      </div>\n    </a>`;
+  }
   return `\n    <a class="related-card" href="/watch?v=${encodeURIComponent(e.video_id)}">\n      <div class="thumb-wrap" style="width:168px;">\n        ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}\n        ${e.length_text ? `<span class="duration">${escapeHtml(e.length_text)}</span>` : ""}\n      </div>\n      <div>\n        <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>\n        <div class="sub">${escapeHtml(e.channel || "")}${e.view_count_text ? "<br>" + escapeHtml(e.view_count_text) : ""}</div>\n      </div>\n    </a>`;
 }
 
@@ -1382,6 +1386,216 @@ function initHistoryPage() {
     .catch(() => renderEntries(getJSON(HISTORY_KEY, [])));
 }
 
+function initAccountPage() {
+  const iconPreview = document.getElementById("accountIconPreview");
+  const iconInput = document.getElementById("accountIconInput");
+  const iconPickBtn = document.getElementById("accountIconPickBtn");
+  const iconRemoveBtn = document.getElementById("accountIconRemoveBtn");
+  const nameInput = document.getElementById("accountDisplayName");
+  const userIdInput = document.getElementById("accountUserId");
+  const saveBtn = document.getElementById("accountSaveBtn");
+  const status = document.getElementById("accountStatus");
+
+  let pendingIconDataUrl = undefined; // undefined=変更なし, ""=削除, "data:..."=新しいアイコン
+
+  function renderIconPreview(src) {
+    iconPreview.innerHTML = src ? `<img src="${escapeHtml(src)}" alt="">` : "?";
+  }
+
+  fetch("/proxy/user/me")
+    .then((res) => res.json())
+    .then((data) => {
+      nameInput.value = data.display_name || "";
+      userIdInput.value = data.user_id || "";
+      renderIconPreview(data.avatar_base64);
+    })
+    .catch(() => {
+      status.textContent = "読み込みに失敗しました";
+    });
+
+  iconPickBtn.addEventListener("click", () => iconInput.click());
+
+  iconInput.addEventListener("change", () => {
+    const file = iconInput.files && iconInput.files[0];
+    if (!file) return;
+    if (file.size > 50 * 1024) {
+      status.textContent = "アイコンは50KB以下の画像を選んでください";
+      iconInput.value = "";
+      return;
+    }
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = () => {
+      img.onload = () => {
+        if (img.width !== img.height) {
+          status.textContent = `アイコンは正方形の画像にしてください(現在: ${img.width}x${img.height})`;
+          iconInput.value = "";
+          return;
+        }
+        status.textContent = "";
+        pendingIconDataUrl = reader.result;
+        renderIconPreview(pendingIconDataUrl);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  iconRemoveBtn.addEventListener("click", () => {
+    pendingIconDataUrl = "";
+    renderIconPreview(null);
+  });
+
+  saveBtn.addEventListener("click", () => {
+    const body = {
+      display_name: nameInput.value,
+      user_id: userIdInput.value,
+    };
+    if (pendingIconDataUrl !== undefined) {
+      body.avatar_base64 = pendingIconDataUrl;
+    }
+    status.textContent = "保存中…";
+    fetch("/proxy/user/me", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          status.textContent = data.message || data.detail || "保存に失敗しました";
+          return;
+        }
+        pendingIconDataUrl = undefined;
+        status.textContent = "保存しました";
+        renderIconPreview(data.avatar_base64);
+      })
+      .catch(() => {
+        status.textContent = "保存に失敗しました(通信エラー)";
+      });
+  });
+}
+
+function initInquiriesPage() {
+  const subjectInput = document.getElementById("inquirySubject");
+  const messageInput = document.getElementById("inquiryMessage");
+  const submitBtn = document.getElementById("inquirySubmitBtn");
+  const formStatus = document.getElementById("inquiryFormStatus");
+  const listBox = document.getElementById("inquiryList");
+
+  const STATUS_LABELS = { open: "未対応", answered: "対応済み" };
+
+  function loadList() {
+    fetch("/proxy/inquiries")
+      .then((res) => res.json())
+      .then((data) => {
+        const inquiries = data.inquiries || [];
+        if (!inquiries.length) {
+          listBox.innerHTML = '<div class="empty-state">お問い合わせはまだありません</div>';
+          return;
+        }
+        listBox.innerHTML = inquiries.map((inq) => `
+          <a class="inquiry-row" href="/inquiries/${inq.id}">
+            <div class="inquiry-row-main">
+              <span class="inquiry-row-subject">${escapeHtml(inq.subject)}</span>
+              ${data.is_owner ? `<span class="inquiry-row-email">${escapeHtml(inq.email)}</span>` : ""}
+            </div>
+            <span class="inquiry-status inquiry-status-${escapeHtml(inq.status)}">${escapeHtml(STATUS_LABELS[inq.status] || inq.status)}</span>
+          </a>`).join("");
+      })
+      .catch(() => {
+        listBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
+      });
+  }
+
+  submitBtn.addEventListener("click", () => {
+    const subject = subjectInput.value.trim();
+    const message = messageInput.value.trim();
+    if (!subject || !message) {
+      formStatus.textContent = "件名と内容を入力してください";
+      return;
+    }
+    formStatus.textContent = "送信中…";
+    fetch("/proxy/inquiries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject, message }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          formStatus.textContent = data.message || data.detail || "送信に失敗しました";
+          return;
+        }
+        formStatus.textContent = "送信しました";
+        subjectInput.value = "";
+        messageInput.value = "";
+        loadList();
+      })
+      .catch(() => {
+        formStatus.textContent = "送信に失敗しました(通信エラー)";
+      });
+  });
+
+  loadList();
+}
+
+function initInquiryDetailPage(inquiryId) {
+  const titleEl = document.getElementById("inquirySubjectTitle");
+  const threadEl = document.getElementById("inquiryThread");
+  const replyInput = document.getElementById("inquiryReplyMessage");
+  const replySubmitBtn = document.getElementById("inquiryReplySubmitBtn");
+  const replyStatus = document.getElementById("inquiryReplyStatus");
+
+  function loadThread() {
+    fetch(`/proxy/inquiries/${inquiryId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const inquiry = data.inquiry;
+        titleEl.textContent = inquiry.subject;
+        const ownerRow = `<div class="inquiry-message"><div class="inquiry-message-meta">${data.is_owner ? escapeHtml(inquiry.email) : "あなた"}</div><div class="inquiry-message-body">${escapeHtml(inquiry.message)}</div></div>`;
+        const replyRows = (data.replies || []).map((r) => `
+          <div class="inquiry-message ${r.is_owner ? "inquiry-message-owner" : ""}">
+            <div class="inquiry-message-meta">${r.is_owner ? "オーナー" : (data.is_owner ? escapeHtml(r.email) : "あなた")}</div>
+            <div class="inquiry-message-body">${escapeHtml(r.message)}</div>
+          </div>`).join("");
+        threadEl.innerHTML = ownerRow + replyRows;
+      })
+      .catch(() => {
+        threadEl.innerHTML = '<div class="empty-state">読み込みに失敗しました(権限が無いか、削除された可能性があります)</div>';
+      });
+  }
+
+  replySubmitBtn.addEventListener("click", () => {
+    const message = replyInput.value.trim();
+    if (!message) {
+      replyStatus.textContent = "返信内容を入力してください";
+      return;
+    }
+    replyStatus.textContent = "送信中…";
+    fetch(`/proxy/inquiries/${inquiryId}/replies`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          replyStatus.textContent = data.message || data.detail || "送信に失敗しました";
+          return;
+        }
+        replyStatus.textContent = "";
+        replyInput.value = "";
+        loadThread();
+      })
+      .catch(() => {
+        replyStatus.textContent = "送信に失敗しました(通信エラー)";
+      });
+  });
+
+  loadThread();
+}
+
 function initSettingsPage() {
   const input = document.getElementById("apiBaseInput");
   const status = document.getElementById("apiBaseStatus");
@@ -1690,7 +1904,7 @@ document.addEventListener("DOMContentLoaded", () => {
   checkForAnnouncement();
   const ds = document.body.dataset;
   const page = ds.page;
-  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage();
+  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage(); else if (page === "account") initAccountPage(); else if (page === "inquiries") initInquiriesPage(); else if (page === "inquiry_detail") initInquiryDetailPage(ds.inquiryId);
 });
 
 if ("serviceWorker" in navigator) {
