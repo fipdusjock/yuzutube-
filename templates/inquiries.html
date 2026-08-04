@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}お問い合わせ - {{ site_name }}{% endblock %}
+{% block page_id %}inquiries{% endblock %}
+{% block content %}
+<h1 class="section-title">お問い合わせ</h1>
+
+<div class="page-settings-group">
+  <div class="page-settings-card">
+    <div class="account-field">
+      <label for="inquirySubject">件名</label>
+      <input type="text" id="inquirySubject" maxlength="100" placeholder="件名(100文字まで)">
+    </div>
+    <div class="account-field">
+      <label for="inquiryMessage">内容</label>
+      <textarea id="inquiryMessage" maxlength="2000" rows="5" placeholder="お問い合わせ内容(2000文字まで)"></textarea>
+    </div>
+    <div class="page-settings-controls">
+      <button type="button" class="page-settings-btn" id="inquirySubmitBtn">送信</button>
+    </div>
+    <div class="account-status" id="inquiryFormStatus"></div>
+  </div>
+</div>
+
+<div class="section-title" style="margin-top:24px;">送信したお問い合わせ</div>
+<div id="inquiryList" class="inquiry-list"></div>
+{% endblock %}

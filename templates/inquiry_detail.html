@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}お問い合わせ詳細 - {{ site_name }}{% endblock %}
+{% block page_id %}inquiry_detail{% endblock %}
+{% block body_data %}data-inquiry-id="{{ inquiry_id }}"{% endblock %}
+{% block content %}
+<h1 class="section-title" id="inquirySubjectTitle">お問い合わせ</h1>
+<div id="inquiryThread" class="inquiry-thread"></div>
+
+<div class="page-settings-group" style="margin-top:16px;">
+  <div class="page-settings-card">
+    <div class="account-field">
+      <label for="inquiryReplyMessage">返信</label>
+      <textarea id="inquiryReplyMessage" maxlength="2000" rows="4" placeholder="返信内容"></textarea>
+    </div>
+    <div class="page-settings-controls">
+      <button type="button" class="page-settings-btn" id="inquiryReplySubmitBtn">返信を送る</button>
+    </div>
+    <div class="account-status" id="inquiryReplyStatus"></div>
+  </div>
+</div>
+{% endblock %}
