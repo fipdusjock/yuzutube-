@@ -111,6 +111,31 @@ const LIKES_MIGRATION_FLAG_KEY = "tubely_likes_migrated_v2";
 
 const HISTORY_KEY = "tubely_history";
 
+function syncAccountDataOnLoad() {
+  // ログイン中なら、サーバー側の登録チャンネル・いいねをローカルへ反映しておく。
+  // これをしないと、別端末で登録/いいねした内容が、このボタンの状態(色が付くかどうか)に
+  // 反映されないままになってしまう(書き込みだけ同期していて、読み込みが伴っていなかった)。
+  fetch("/proxy/user/subscriptions")
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (!data) return;
+      const subs = (data.subscriptions || []).map(s => ({ channel_id: s.channel_id, channel: s.channel, thumbnail: s.thumbnail }));
+      setJSON(SUBS_KEY, subs);
+    })
+    .catch(() => {});
+
+  fetch("/proxy/user/likes")
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (!data) return;
+      const likes = (data.likes || []).map(l => ({
+        video_id: l.video_id, title: l.title, thumbnail: l.thumbnail, channel: l.channel, duration: l.duration,
+      }));
+      setJSON(LIKES_KEY, likes);
+    })
+    .catch(() => {});
+}
+
 function migrateLikesIfNeeded() {
   // 以前のバージョンでは、いいねは動画IDの文字列配列だけで保存していて、
   // タイトルやサムネイルなどのメタ情報を持っていなかった。そのままだと
@@ -238,7 +263,7 @@ function likeButtonHTML(videoId, likeCount, meta) {
   const liked = isLiked(videoId);
   const countText = likeCount ? formatCountJa(likeCount) : "";
   const m = meta || {};
-  const activeStyle = liked ? "color:#065fd4;" : "";
+  const activeStyle = liked ? "color:var(--accent);" : "";
   return `<button class="stat-pill like-btn ${liked ? "active" : ""}" data-action="toggle-like" style="${activeStyle}"\n    data-video-id="${escapeHtml(videoId)}"\n    data-title="${escapeHtml(m.title || "")}"\n    data-thumbnail="${escapeHtml(m.thumbnail || "")}"\n    data-channel="${escapeHtml(m.channel || "")}"\n    data-duration="${escapeHtml(m.duration || "")}">\n    ${icon("thumbsUp")}${countText}\n  </button>`;
 }
 
@@ -261,7 +286,7 @@ document.addEventListener("pointerup", e => {
       duration: btn.dataset.duration ? Number(btn.dataset.duration) : null,
     });
     btn.classList.toggle("active", nowLiked);
-    btn.style.color = nowLiked ? "#065fd4" : "";
+    btn.style.color = nowLiked ? "var(--accent)" : "";
   }
 });
 
@@ -1316,12 +1341,28 @@ async function initPlaylistPage(playlistId) {
 
 function initSubscriptionsPage() {
   const box = document.getElementById("subscriptionsList");
-  const subs = getJSON(SUBS_KEY, []);
-  if (!subs.length) {
-    box.innerHTML = '<div class="empty-state">登録チャンネルはありません</div>';
-    return;
+
+  function render(subs) {
+    if (!subs.length) {
+      box.innerHTML = '<div class="empty-state">登録チャンネルはありません</div>';
+      return;
+    }
+    box.innerHTML = subs.map(s => `\n    <a class="sub-row" href="/channel/${encodeURIComponent(s.channel_id)}">\n      <div class="avatar" style="width:48px;height:48px;">\n        ${s.thumbnail ? `<img src="${escapeHtml(s.thumbnail)}" alt="">` : escapeHtml((s.channel || "?")[0] || "?")}\n      </div>\n      <div class="title">${escapeHtml(s.channel || "")}</div>\n    </a>`).join("");
   }
-  box.innerHTML = subs.map(s => `\n    <a class="sub-row" href="/channel/${encodeURIComponent(s.channel_id)}">\n      <div class="avatar" style="width:48px;height:48px;">\n        ${s.thumbnail ? `<img src="${escapeHtml(s.thumbnail)}" alt="">` : escapeHtml((s.channel || "?")[0] || "?")}\n      </div>\n      <div class="title">${escapeHtml(s.channel || "")}</div>\n    </a>`).join("");
+
+  fetch("/proxy/user/subscriptions")
+    .then((res) => {
+      if (!res.ok) throw new Error("not logged in");
+      return res.json();
+    })
+    .then((data) => {
+      const subs = (data.subscriptions || []).map(s => ({ channel_id: s.channel_id, channel: s.channel, thumbnail: s.thumbnail }));
+      setJSON(SUBS_KEY, subs); // ローカルにも反映しておき、他の画面(登録ボタンの状態表示等)とズレないようにする
+      render(subs);
+    })
+    .catch(() => {
+      render(getJSON(SUBS_KEY, []));
+    });
 }
 
 function initLikedPage() {
@@ -1329,37 +1370,54 @@ function initLikedPage() {
   const heroThumb = document.getElementById("likedHeroThumb");
   const metaBox = document.getElementById("likedMeta");
   const playAllBtn = document.getElementById("likedPlayAllBtn");
-  const likes = getJSON(LIKES_KEY, []).map(l => (typeof l === "string" ? { video_id: l } : l));
 
-  if (!likes.length) {
-    listBox.innerHTML = '<div class="empty-state">高く評価した動画はまだありません</div>';
-    if (metaBox) metaBox.textContent = "0 本の動画";
-    if (playAllBtn) playAllBtn.disabled = true;
-    return;
+  function render(likes) {
+    if (!likes.length) {
+      listBox.innerHTML = '<div class="empty-state">高く評価した動画はまだありません</div>';
+      if (metaBox) metaBox.textContent = "0 本の動画";
+      if (playAllBtn) playAllBtn.disabled = true;
+      return;
+    }
+    if (metaBox) metaBox.textContent = `${likes.length} 本の動画`;
+    if (heroThumb && likes[0].thumbnail) {
+      heroThumb.innerHTML = `<img src="${escapeHtml(likes[0].thumbnail)}" alt="">`;
+    }
+    if (playAllBtn) {
+      playAllBtn.disabled = false;
+      playAllBtn.onclick = () => {
+        window.location.href = `/watch?v=${encodeURIComponent(likes[0].video_id)}`;
+      };
+    }
+
+    listBox.innerHTML = likes.map((l, i) => `
+      <a class="pl-video-row" href="/watch?v=${encodeURIComponent(l.video_id)}">
+        <span class="pl-video-index">${i + 1}</span>
+        <span class="pl-video-thumb">
+          ${l.thumbnail ? `<img src="${escapeHtml(l.thumbnail)}" alt="" loading="lazy">` : ""}
+          ${l.duration ? `<span class="duration">${escapeHtml(formatDuration(l.duration))}</span>` : ""}
+        </span>
+        <span class="pl-video-body">
+          <span class="pl-video-title">${escapeHtml(l.title || "(タイトル不明)")}</span>
+          <span class="pl-video-channel">${escapeHtml(l.channel || "")}</span>
+        </span>
+      </a>`).join("");
   }
 
-  if (metaBox) metaBox.textContent = `${likes.length} 本の動画`;
-  if (heroThumb && likes[0].thumbnail) {
-    heroThumb.innerHTML = `<img src="${escapeHtml(likes[0].thumbnail)}" alt="">`;
-  }
-  if (playAllBtn) {
-    playAllBtn.addEventListener("click", () => {
-      window.location.href = `/watch?v=${encodeURIComponent(likes[0].video_id)}`;
+  fetch("/proxy/user/likes")
+    .then((res) => {
+      if (!res.ok) throw new Error("not logged in");
+      return res.json();
+    })
+    .then((data) => {
+      const likes = (data.likes || []).map(l => ({
+        video_id: l.video_id, title: l.title, thumbnail: l.thumbnail, channel: l.channel, duration: l.duration,
+      }));
+      setJSON(LIKES_KEY, likes); // ローカルにも反映しておき、いいねボタンの状態表示等とズレないようにする
+      render(likes);
+    })
+    .catch(() => {
+      render(getJSON(LIKES_KEY, []).map(l => (typeof l === "string" ? { video_id: l } : l)));
     });
-  }
-
-  listBox.innerHTML = likes.map((l, i) => `
-    <a class="pl-video-row" href="/watch?v=${encodeURIComponent(l.video_id)}">
-      <span class="pl-video-index">${i + 1}</span>
-      <span class="pl-video-thumb">
-        ${l.thumbnail ? `<img src="${escapeHtml(l.thumbnail)}" alt="" loading="lazy">` : ""}
-        ${l.duration ? `<span class="duration">${escapeHtml(formatDuration(l.duration))}</span>` : ""}
-      </span>
-      <span class="pl-video-body">
-        <span class="pl-video-title">${escapeHtml(l.title || "(タイトル不明)")}</span>
-        <span class="pl-video-channel">${escapeHtml(l.channel || "")}</span>
-      </span>
-    </a>`).join("");
 }
 
 function initHistoryPage() {
@@ -1543,26 +1601,67 @@ function initInquiriesPage() {
 function initInquiryDetailPage(inquiryId) {
   const titleEl = document.getElementById("inquirySubjectTitle");
   const threadEl = document.getElementById("inquiryThread");
+  const deleteBtn = document.getElementById("inquiryDeleteBtn");
   const replyInput = document.getElementById("inquiryReplyMessage");
   const replySubmitBtn = document.getElementById("inquiryReplySubmitBtn");
   const replyStatus = document.getElementById("inquiryReplyStatus");
 
-  function loadThread() {
+  const POLL_INTERVAL_MS = 3000;
+  let pollTimer = null;
+  let lastRenderedSignature = "";
+
+  function avatarHTML(avatarInfo, fallbackLabel) {
+    const src = avatarInfo && avatarInfo.avatar_base64;
+    if (src) return `<div class="inquiry-avatar"><img src="${escapeHtml(src)}" alt=""></div>`;
+    return `<div class="inquiry-avatar">${escapeHtml((fallbackLabel || "?")[0] || "?")}</div>`;
+  }
+
+  function renderThread(data) {
+    const inquiry = data.inquiry;
+    const avatars = data.avatars || {};
+    titleEl.textContent = inquiry.subject;
+    deleteBtn.hidden = !data.is_owner;
+
+    const ownerLabel = data.is_owner ? (avatars[inquiry.email] && avatars[inquiry.email].display_name) || inquiry.email : "あなた";
+    const firstRow = `
+      <div class="inquiry-message-row">
+        ${avatarHTML(avatars[inquiry.email], ownerLabel)}
+        <div class="inquiry-message"><div class="inquiry-message-meta">${escapeHtml(ownerLabel)}</div><div class="inquiry-message-body">${escapeHtml(inquiry.message)}</div></div>
+      </div>`;
+
+    const replyRows = (data.replies || []).map((r) => {
+      const label = r.is_owner ? "オーナー" : (data.is_owner ? ((avatars[r.email] && avatars[r.email].display_name) || r.email) : "あなた");
+      return `
+      <div class="inquiry-message-row ${r.is_owner ? "inquiry-message-row-owner" : ""}">
+        ${avatarHTML(avatars[r.email], label)}
+        <div class="inquiry-message ${r.is_owner ? "inquiry-message-owner" : ""}">
+          <div class="inquiry-message-meta">${escapeHtml(label)}</div>
+          <div class="inquiry-message-body">${escapeHtml(r.message)}</div>
+        </div>
+      </div>`;
+    }).join("");
+
+    threadEl.innerHTML = firstRow + replyRows;
+  }
+
+  function loadThread(isPoll) {
     fetch(`/proxy/inquiries/${inquiryId}`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("failed");
+        return res.json();
+      })
       .then((data) => {
-        const inquiry = data.inquiry;
-        titleEl.textContent = inquiry.subject;
-        const ownerRow = `<div class="inquiry-message"><div class="inquiry-message-meta">${data.is_owner ? escapeHtml(inquiry.email) : "あなた"}</div><div class="inquiry-message-body">${escapeHtml(inquiry.message)}</div></div>`;
-        const replyRows = (data.replies || []).map((r) => `
-          <div class="inquiry-message ${r.is_owner ? "inquiry-message-owner" : ""}">
-            <div class="inquiry-message-meta">${r.is_owner ? "オーナー" : (data.is_owner ? escapeHtml(r.email) : "あなた")}</div>
-            <div class="inquiry-message-body">${escapeHtml(r.message)}</div>
-          </div>`).join("");
-        threadEl.innerHTML = ownerRow + replyRows;
+        // ポーリングのたびに毎回作り直すとチラつくので、内容に変化が無ければ何もしない
+        // (LINEのように、相手の返信が来た時だけ自然に増える見た目にするため)。
+        const signature = JSON.stringify(data);
+        if (signature === lastRenderedSignature) return;
+        lastRenderedSignature = signature;
+        renderThread(data);
       })
       .catch(() => {
-        threadEl.innerHTML = '<div class="empty-state">読み込みに失敗しました(権限が無いか、削除された可能性があります)</div>';
+        if (!isPoll) {
+          threadEl.innerHTML = '<div class="empty-state">読み込みに失敗しました(権限が無いか、削除された可能性があります)</div>';
+        }
       });
   }
 
@@ -1586,15 +1685,34 @@ function initInquiryDetailPage(inquiryId) {
         }
         replyStatus.textContent = "";
         replyInput.value = "";
-        loadThread();
+        loadThread(false);
       })
       .catch(() => {
         replyStatus.textContent = "送信に失敗しました(通信エラー)";
       });
   });
 
-  loadThread();
+  deleteBtn.addEventListener("click", () => {
+    if (!window.confirm("本当に削除しますか？この操作は取り消せません。")) return;
+    fetch(`/proxy/inquiries/${inquiryId}`, { method: "DELETE" })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          alert(data.message || data.detail || "削除に失敗しました");
+          return;
+        }
+        clearInterval(pollTimer);
+        window.location.href = "/inquiries";
+      })
+      .catch(() => {
+        alert("削除に失敗しました(通信エラー)");
+      });
+  });
+
+  loadThread(false);
+  pollTimer = setInterval(() => loadThread(true), POLL_INTERVAL_MS);
 }
+
 
 function initSettingsPage() {
   const input = document.getElementById("apiBaseInput");
@@ -1897,6 +2015,7 @@ function initSearchSuggest() {
 
 document.addEventListener("DOMContentLoaded", () => {
   migrateLikesIfNeeded();
+  syncAccountDataOnLoad();
   initSearchSuggest();
   renderSidebarSubs();
   recordAndShowVisitCount();

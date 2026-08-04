@@ -1440,10 +1440,30 @@ main.content {
 .inquiry-status-open { background: rgba(255,180,0,0.15); color: #d99400; }
 .inquiry-status-answered { background: rgba(60,180,90,0.15); color: #3ab55a; }
 
-.inquiry-thread { display: flex; flex-direction: column; gap: 10px; }
-.inquiry-message { background: var(--bg-elevated); border-radius: 10px; padding: 12px 14px; }
-.inquiry-message-owner { background: rgba(6,95,212,0.08); }
-.inquiry-message-meta { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
+.inquiry-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.inquiry-detail-header .section-title { margin: 0; }
+
+.inquiry-thread { display: flex; flex-direction: column; gap: 14px; }
+.inquiry-message-row { display: flex; align-items: flex-start; gap: 10px; }
+.inquiry-message-row-owner { flex-direction: row-reverse; }
+.inquiry-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.inquiry-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.inquiry-message { background: var(--bg-elevated); border-radius: 14px; padding: 10px 14px; max-width: 78%; }
+.inquiry-message-owner { background: var(--accent); color: white; }
+.inquiry-message-owner .inquiry-message-meta { color: rgba(255,255,255,0.8); }
+.inquiry-message-meta { font-size: 11.5px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
 .inquiry-message-body { font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
 .announcement-modal {
