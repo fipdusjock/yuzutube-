@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -493,6 +493,8 @@ def _proxy_user_api(path, method="GET", json_body=None):
         resp = requests.get(url, headers=headers, timeout=PROXY_TIMEOUT)
     elif method == "POST":
         resp = requests.post(url, json=json_body, headers=headers, timeout=PROXY_TIMEOUT)
+    elif method == "PUT":
+        resp = requests.put(url, json=json_body, headers=headers, timeout=PROXY_TIMEOUT)
     else:
         resp = requests.delete(url, headers=headers, timeout=PROXY_TIMEOUT)
 
