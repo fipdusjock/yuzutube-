@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -252,6 +252,21 @@ def playlist():
 @app.route("/settings")
 def settings():
     return render_template("settings.html")
+
+
+@app.route("/account")
+def account_page():
+    return render_template("account.html")
+
+
+@app.route("/inquiries")
+def inquiries_page():
+    return render_template("inquiries.html")
+
+
+@app.route("/inquiries/<int:inquiry_id>")
+def inquiry_detail_page(inquiry_id):
+    return render_template("inquiry_detail.html", inquiry_id=inquiry_id)
 
 
 @app.route("/changelog")
@@ -510,6 +525,30 @@ def proxy_user_likes():
 @app.route("/proxy/user/likes/<video_id>", methods=["DELETE"])
 def proxy_user_like_delete(video_id):
     return _proxy_user_api(f"/api/user/likes/{video_id}", "DELETE")
+
+
+@app.route("/proxy/user/me", methods=["GET", "PUT"])
+def proxy_user_me():
+    if request.method == "GET":
+        return _proxy_user_api("/api/user/me")
+    return _proxy_user_api("/api/user/me", "PUT", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/inquiries", methods=["GET", "POST"])
+def proxy_inquiries():
+    if request.method == "GET":
+        return _proxy_user_api("/api/inquiries")
+    return _proxy_user_api("/api/inquiries", "POST", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/inquiries/<int:inquiry_id>", methods=["GET"])
+def proxy_inquiry_detail(inquiry_id):
+    return _proxy_user_api(f"/api/inquiries/{inquiry_id}")
+
+
+@app.route("/proxy/inquiries/<int:inquiry_id>/replies", methods=["POST"])
+def proxy_inquiry_reply(inquiry_id):
+    return _proxy_user_api(f"/api/inquiries/{inquiry_id}/replies", "POST", request.get_json(silent=True) or {})
 
 
 @app.route("/proxy/search")
