@@ -1146,6 +1146,59 @@ function formatPlayerTime(sec) {
 }
 
 function wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContext, currentVideoId) {
+  // ループ再生・自動再生は、この関数の他の処理(画質/字幕まわり等)で万一エラーが
+  // 起きても巻き込まれて動かなくなることが無いよう、あえて一番最初に配線しておく。
+  const LOOP_KEY = "tubely_loop_enabled";
+  const loopToggleBtn = playerRoot.querySelector("#loopToggleBtn");
+  const loopValueLabel = playerRoot.querySelector("#loopValueLabel");
+  let loopEnabled = localStorage.getItem(LOOP_KEY) === "1";
+  function applyLoopState() {
+    videoEl.loop = loopEnabled;
+    if (syncState.audioEl) syncState.audioEl.loop = loopEnabled;
+    if (loopValueLabel) loopValueLabel.textContent = loopEnabled ? "オン" : "オフ";
+  }
+  applyLoopState();
+  if (loopToggleBtn) {
+    loopToggleBtn.addEventListener("click", () => {
+      loopEnabled = !loopEnabled;
+      localStorage.setItem(LOOP_KEY, loopEnabled ? "1" : "0");
+      applyLoopState();
+    });
+  }
+
+  const AUTOPLAY_KEY = "tubely_autoplay_enabled";
+  const autoplayToggleBtn = playerRoot.querySelector("#autoplayToggleBtn");
+  const autoplayValueLabel = playerRoot.querySelector("#autoplayValueLabel");
+  let autoplayEnabled = localStorage.getItem(AUTOPLAY_KEY) !== "0"; // 既定はオン(YouTube本家と同様)
+  function applyAutoplayState() {
+    if (autoplayValueLabel) autoplayValueLabel.textContent = autoplayEnabled ? "オン" : "オフ";
+  }
+  applyAutoplayState();
+  if (autoplayToggleBtn) {
+    autoplayToggleBtn.addEventListener("click", () => {
+      autoplayEnabled = !autoplayEnabled;
+      localStorage.setItem(AUTOPLAY_KEY, autoplayEnabled ? "1" : "0");
+      applyAutoplayState();
+    });
+  }
+
+  if (playlistContext) {
+    videoEl.addEventListener("ended", () => {
+      // ループがオンの場合はvideoEl.loopが優先されるので、ここには来ない
+      if (!autoplayEnabled) return;
+      fetch(`/proxy/playlists/${playlistContext.playlistId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          const videos = data.videos || [];
+          const nextIndex = playlistContext.index + 1;
+          if (nextIndex >= videos.length) return; // プレイリストの最後まで来たら何もしない
+          const nextVideo = videos[nextIndex];
+          window.location.href = `/watch?v=${encodeURIComponent(nextVideo.video_id)}&list=my:${playlistContext.playlistId}&index=${nextIndex}`;
+        })
+        .catch(() => {});
+    });
+  }
+
   const playBtn = playerRoot.querySelector("#playPauseBtn");
   const seekBar = playerRoot.querySelector("#seekBar");
   const curTimeEl = playerRoot.querySelector("#curTime");
@@ -1313,59 +1366,6 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContex
 
   videoEl.addEventListener("play", showControls);
   showControls();
-
-  // ---------- ループ再生 ----------
-  const LOOP_KEY = "tubely_loop_enabled";
-  const loopToggleBtn = playerRoot.querySelector("#loopToggleBtn");
-  const loopValueLabel = playerRoot.querySelector("#loopValueLabel");
-  let loopEnabled = localStorage.getItem(LOOP_KEY) === "1";
-  function applyLoopState() {
-    videoEl.loop = loopEnabled;
-    if (syncState.audioEl) syncState.audioEl.loop = loopEnabled;
-    if (loopValueLabel) loopValueLabel.textContent = loopEnabled ? "オン" : "オフ";
-  }
-  applyLoopState();
-  if (loopToggleBtn) {
-    loopToggleBtn.addEventListener("click", () => {
-      loopEnabled = !loopEnabled;
-      localStorage.setItem(LOOP_KEY, loopEnabled ? "1" : "0");
-      applyLoopState();
-    });
-  }
-
-  // ---------- 自動再生(プレイリスト内で次の動画へ進む) ----------
-  const AUTOPLAY_KEY = "tubely_autoplay_enabled";
-  const autoplayToggleBtn = playerRoot.querySelector("#autoplayToggleBtn");
-  const autoplayValueLabel = playerRoot.querySelector("#autoplayValueLabel");
-  let autoplayEnabled = localStorage.getItem(AUTOPLAY_KEY) !== "0"; // 既定はオン(YouTube本家と同様)
-  function applyAutoplayState() {
-    if (autoplayValueLabel) autoplayValueLabel.textContent = autoplayEnabled ? "オン" : "オフ";
-  }
-  applyAutoplayState();
-  if (autoplayToggleBtn) {
-    autoplayToggleBtn.addEventListener("click", () => {
-      autoplayEnabled = !autoplayEnabled;
-      localStorage.setItem(AUTOPLAY_KEY, autoplayEnabled ? "1" : "0");
-      applyAutoplayState();
-    });
-  }
-
-  if (playlistContext) {
-    videoEl.addEventListener("ended", () => {
-      // ループがオンの場合はvideoEl.loopが優先されるので、ここには来ない
-      if (!autoplayEnabled) return;
-      fetch(`/proxy/playlists/${playlistContext.playlistId}`)
-        .then((res) => res.json())
-        .then((data) => {
-          const videos = data.videos || [];
-          const nextIndex = playlistContext.index + 1;
-          if (nextIndex >= videos.length) return; // プレイリストの最後まで来たら何もしない
-          const nextVideo = videos[nextIndex];
-          window.location.href = `/watch?v=${encodeURIComponent(nextVideo.video_id)}&list=my:${playlistContext.playlistId}&index=${nextIndex}`;
-        })
-        .catch(() => {});
-    });
-  }
 }
 
 const CHANNEL_TABS = [ {
