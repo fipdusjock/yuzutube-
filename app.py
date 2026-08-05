@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -556,7 +556,7 @@ def _proxy_user_api(path, method="GET", json_body=None):
     elif method == "PUT":
         resp = requests.put(url, json=json_body, headers=headers, timeout=PROXY_TIMEOUT)
     else:
-        resp = requests.delete(url, headers=headers, timeout=PROXY_TIMEOUT)
+        resp = requests.delete(url, json=json_body, headers=headers, timeout=PROXY_TIMEOUT)
 
     try:
         data = resp.json()
@@ -663,6 +663,16 @@ def proxy_banned_word_delete(word_id):
     return _proxy_user_api(f"/api/admin/banned-words/{word_id}", "DELETE")
 
 
+@app.route("/proxy/admin/banned-words/by-text", methods=["DELETE"])
+def proxy_banned_word_delete_by_text():
+    return _proxy_user_api("/api/admin/banned-words/by-text", "DELETE", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/admin/banned-words/clear-all", methods=["DELETE"])
+def proxy_banned_words_clear_all():
+    return _proxy_user_api("/api/admin/banned-words", "DELETE")
+
+
 @app.route("/proxy/admin/banned-ips", methods=["GET", "POST"])
 def proxy_banned_ips():
     if request.method == "GET":
@@ -673,6 +683,18 @@ def proxy_banned_ips():
 @app.route("/proxy/admin/banned-ips/<path:ip>", methods=["DELETE"])
 def proxy_banned_ip_delete(ip):
     return _proxy_user_api(f"/api/admin/banned-ips/{ip}", "DELETE")
+
+
+@app.route("/proxy/admin/banned-emails", methods=["GET", "POST"])
+def proxy_banned_emails():
+    if request.method == "GET":
+        return _proxy_user_api("/api/admin/banned-emails")
+    return _proxy_user_api("/api/admin/banned-emails", "POST", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/admin/banned-emails/<path:email>", methods=["DELETE"])
+def proxy_banned_email_delete(email):
+    return _proxy_user_api(f"/api/admin/banned-emails/{email}", "DELETE")
 
 
 @app.route("/proxy/admin/ban-events", methods=["GET"])
