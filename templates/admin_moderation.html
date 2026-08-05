@@ -31,7 +31,17 @@
         </div>
       </div>
       <div class="account-status" id="ngWordStatus"></div>
-      <div id="ngWordList" class="ng-word-list"></div>
+      <div class="ng-word-count" id="ngWordCount">読み込み中…</div>
+      <div class="account-field">
+        <label for="ngWordRemoveInput">単語を指定して削除(一覧は表示されないため、削除したい単語をそのまま入力してください)</label>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="ngWordRemoveInput" placeholder="削除したい単語" style="flex:1;">
+          <button type="button" class="page-settings-btn danger" id="ngWordRemoveBtn">削除</button>
+        </div>
+      </div>
+      <div class="page-settings-controls">
+        <button type="button" class="page-settings-btn danger" id="ngWordClearAllBtn">全て削除</button>
+      </div>
     </div>
   </div>
 
@@ -57,6 +67,31 @@
     <div class="page-settings-group-title">BAN中のIP一覧</div>
     <div class="page-settings-card">
       <div id="bannedIpsList" class="banned-ips-list"></div>
+    </div>
+  </div>
+
+  <div class="page-settings-group">
+    <div class="page-settings-group-title">メールアドレスの手動BAN</div>
+    <div class="page-settings-card">
+      <div class="account-field">
+        <label for="manualBanEmailInput">メールアドレス</label>
+        <input type="text" id="manualBanEmailInput" placeholder="例: user@example.com">
+      </div>
+      <div class="account-field">
+        <label for="manualBanEmailReasonInput">理由(任意)</label>
+        <input type="text" id="manualBanEmailReasonInput" placeholder="理由">
+      </div>
+      <div class="page-settings-controls">
+        <button type="button" class="page-settings-btn danger" id="manualBanEmailBtn">BANする</button>
+      </div>
+      <div class="account-status" id="manualBanEmailStatus"></div>
+    </div>
+  </div>
+
+  <div class="page-settings-group">
+    <div class="page-settings-group-title">BAN中のメールアドレス一覧</div>
+    <div class="page-settings-card">
+      <div id="bannedEmailsList" class="banned-ips-list"></div>
     </div>
   </div>
 
