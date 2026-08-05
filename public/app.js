@@ -134,6 +134,14 @@ function syncAccountDataOnLoad() {
       setJSON(LIKES_KEY, likes);
     })
     .catch(() => {});
+
+  fetch("/proxy/user/me")
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      const link = document.getElementById("adminModerationLink");
+      if (link && data && data.is_owner) link.hidden = false;
+    })
+    .catch(() => {});
 }
 
 function migrateLikesIfNeeded() {
@@ -1922,6 +1930,197 @@ function initInquiriesPage() {
   loadList();
 }
 
+function initAdminModerationPage() {
+  const accessStatus = document.getElementById("adminAccessStatus");
+  const bodyBox = document.getElementById("adminModerationBody");
+
+  const ngWordInput = document.getElementById("ngWordInput");
+  const ngWordAddBtn = document.getElementById("ngWordAddBtn");
+  const ngWordBulkInput = document.getElementById("ngWordBulkInput");
+  const ngWordBulkAddBtn = document.getElementById("ngWordBulkAddBtn");
+  const ngWordUrlInput = document.getElementById("ngWordUrlInput");
+  const ngWordUrlImportBtn = document.getElementById("ngWordUrlImportBtn");
+  const ngWordStatus = document.getElementById("ngWordStatus");
+  const ngWordListBox = document.getElementById("ngWordList");
+
+  const manualBanIpInput = document.getElementById("manualBanIpInput");
+  const manualBanReasonInput = document.getElementById("manualBanReasonInput");
+  const manualBanBtn = document.getElementById("manualBanBtn");
+  const manualBanStatus = document.getElementById("manualBanStatus");
+  const bannedIpsListBox = document.getElementById("bannedIpsList");
+
+  const banLogFilterInput = document.getElementById("banLogFilterInput");
+  const banLogFilterBtn = document.getElementById("banLogFilterBtn");
+  const banLogClearBtn = document.getElementById("banLogClearBtn");
+  const banEventsListBox = document.getElementById("banEventsList");
+
+  const EVENT_LABELS = { auto_ban: "自動BAN", manual_ban: "手動BAN", unban: "解除" };
+
+  function loadNgWords() {
+    fetch("/proxy/admin/banned-words")
+      .then((res) => res.json())
+      .then((data) => {
+        const words = data.words || [];
+        ngWordListBox.innerHTML = words.length ? words.map((w) => `
+          <div class="ng-word-row">
+            <span>${escapeHtml(w.word)}</span>
+            <button type="button" class="ng-word-remove-btn" data-id="${w.id}">×</button>
+          </div>`).join("") : '<div class="empty-state">NGワードはまだ登録されていません</div>';
+
+        ngWordListBox.querySelectorAll(".ng-word-remove-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            fetch(`/proxy/admin/banned-words/${btn.dataset.id}`, { method: "DELETE" })
+              .then(() => loadNgWords())
+              .catch(() => alert("削除に失敗しました"));
+          });
+        });
+      })
+      .catch(() => {
+        ngWordListBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
+      });
+  }
+
+  function loadBannedIps() {
+    fetch("/proxy/admin/banned-ips")
+      .then((res) => res.json())
+      .then((data) => {
+        const ips = data.ips || [];
+        bannedIpsListBox.innerHTML = ips.length ? ips.map((b) => `
+          <div class="banned-ip-row">
+            <div>
+              <div class="banned-ip-address">${escapeHtml(b.ip)}</div>
+              <div class="banned-ip-reason">${escapeHtml(b.reason || "")} ${b.is_manual ? "(手動)" : "(自動)"}</div>
+            </div>
+            <button type="button" class="page-settings-btn secondary" data-ip="${escapeHtml(b.ip)}">解除</button>
+          </div>`).join("") : '<div class="empty-state">現在BAN中のIPはありません</div>';
+
+        bannedIpsListBox.querySelectorAll("button[data-ip]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            fetch(`/proxy/admin/banned-ips/${encodeURIComponent(btn.dataset.ip)}`, { method: "DELETE" })
+              .then(() => loadBannedIps())
+              .catch(() => alert("解除に失敗しました"));
+          });
+        });
+      })
+      .catch(() => {
+        bannedIpsListBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
+      });
+  }
+
+  function loadBanEvents(filter) {
+    const isEmail = filter && filter.includes("@");
+    const params = filter ? (isEmail ? `?email=${encodeURIComponent(filter)}` : `?ip=${encodeURIComponent(filter)}`) : "";
+    fetch(`/proxy/admin/ban-events${params}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const events = data.events || [];
+        banEventsListBox.innerHTML = events.length ? events.map((e) => `
+          <div class="ban-event-row">
+            <div class="ban-event-top">
+              <span class="ban-event-type ban-event-type-${escapeHtml(e.event_type)}">${escapeHtml(EVENT_LABELS[e.event_type] || e.event_type)}</span>
+              <span class="ban-event-time">${new Date(e.created_at * 1000).toLocaleString("ja-JP")}</span>
+            </div>
+            <div class="ban-event-ip">IP: ${escapeHtml(e.ip)}${e.email ? ` / メール: ${escapeHtml(e.email)}` : ""}</div>
+            ${e.matched_word ? `<div class="ban-event-word">該当ワード: ${escapeHtml(e.matched_word)}</div>` : ""}
+            ${e.reason ? `<div class="ban-event-reason">理由: ${escapeHtml(e.reason)}</div>` : ""}
+            ${e.context ? `<div class="ban-event-context">${escapeHtml(e.context)}</div>` : ""}
+          </div>`).join("") : '<div class="empty-state">ログはありません</div>';
+      })
+      .catch(() => {
+        banEventsListBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
+      });
+  }
+
+  ngWordAddBtn.addEventListener("click", () => {
+    const word = ngWordInput.value.trim();
+    if (!word) return;
+    fetch("/proxy/admin/banned-words", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word }),
+    }).then(() => {
+      ngWordInput.value = "";
+      loadNgWords();
+    }).catch(() => alert("追加に失敗しました"));
+  });
+
+  ngWordBulkAddBtn.addEventListener("click", () => {
+    const text = ngWordBulkInput.value.trim();
+    if (!text) return;
+    ngWordStatus.textContent = "登録中…";
+    fetch("/proxy/admin/banned-words/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        ngWordStatus.textContent = `${data.added} / ${data.total_submitted} 件を登録しました`;
+        ngWordBulkInput.value = "";
+        loadNgWords();
+      })
+      .catch(() => { ngWordStatus.textContent = "登録に失敗しました"; });
+  });
+
+  ngWordUrlImportBtn.addEventListener("click", () => {
+    const url = ngWordUrlInput.value.trim();
+    if (!url) return;
+    ngWordStatus.textContent = "インポート中…(件数が多いと少し時間がかかります)";
+    fetch("/proxy/admin/banned-words/import-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          ngWordStatus.textContent = data.message || data.detail || "インポートに失敗しました";
+          return;
+        }
+        ngWordStatus.textContent = `${data.added} / ${data.total_found} 件を取り込みました`;
+        loadNgWords();
+      })
+      .catch(() => { ngWordStatus.textContent = "インポートに失敗しました(通信エラー)"; });
+  });
+
+  manualBanBtn.addEventListener("click", () => {
+    const ip = manualBanIpInput.value.trim();
+    if (!ip) return;
+    fetch("/proxy/admin/banned-ips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ip, reason: manualBanReasonInput.value.trim() }),
+    })
+      .then(() => {
+        manualBanIpInput.value = "";
+        manualBanReasonInput.value = "";
+        manualBanStatus.textContent = "BANしました";
+        loadBannedIps();
+      })
+      .catch(() => { manualBanStatus.textContent = "BANに失敗しました"; });
+  });
+
+  banLogFilterBtn.addEventListener("click", () => loadBanEvents(banLogFilterInput.value.trim()));
+  banLogClearBtn.addEventListener("click", () => { banLogFilterInput.value = ""; loadBanEvents(""); });
+
+  // オーナーかどうかは、管理者専用APIを実際に叩いてみて403かどうかで判定する
+  // (専用の判定エンドポイントを別途用意せず、実際のアクセス可否をそのまま使う)。
+  fetch("/proxy/admin/banned-words")
+    .then((res) => {
+      if (res.status === 403 || res.status === 401) {
+        accessStatus.textContent = "このページはオーナーのみアクセスできます";
+        return;
+      }
+      bodyBox.hidden = false;
+      loadNgWords();
+      loadBannedIps();
+      loadBanEvents("");
+    })
+    .catch(() => {
+      accessStatus.textContent = "読み込みに失敗しました";
+    });
+}
+
 function initInquiryDetailPage(inquiryId) {
   const titleEl = document.getElementById("inquirySubjectTitle");
   const threadEl = document.getElementById("inquiryThread");
@@ -2283,10 +2482,36 @@ function initSearchSuggest() {
         e.preventDefault();
         input.value = items[Number(el.dataset.index)];
         box.hidden = true;
-        form.submit();
+        submitSearchWithModerationCheck(input.value.trim());
       });
     });
   }
+
+  function submitSearchWithModerationCheck(query) {
+    if (!query) return;
+    fetch("/proxy/moderation/check-search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.blocked) {
+          alert("この検索キーワードはご利用いただけません。");
+          return;
+        }
+        window.location.href = `/results?q=${encodeURIComponent(query)}`;
+      })
+      .catch(() => {
+        // チェック自体が失敗した場合、誤って検索できなくならないよう通常通り送信する
+        window.location.href = `/results?q=${encodeURIComponent(query)}`;
+      });
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    submitSearchWithModerationCheck(input.value.trim());
+  });
 
   input.addEventListener("input", () => {
     clearTimeout(debounceTimer);
@@ -2323,7 +2548,7 @@ function initSearchSuggest() {
       e.preventDefault();
       input.value = items[activeIndex];
       box.hidden = true;
-      form.submit();
+      submitSearchWithModerationCheck(input.value.trim());
     } else if (e.key === "Escape") {
       box.hidden = true;
     }
@@ -2347,7 +2572,7 @@ document.addEventListener("DOMContentLoaded", () => {
   checkForAnnouncement();
   const ds = document.body.dataset;
   const page = ds.page;
-  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage(); else if (page === "account") initAccountPage(); else if (page === "inquiries") initInquiriesPage(); else if (page === "inquiry_detail") initInquiryDetailPage(ds.inquiryId); else if (page === "my_playlists") initMyPlaylistsPage(); else if (page === "my_playlist_detail") initMyPlaylistDetailPage(ds.playlistId);
+  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage(); else if (page === "account") initAccountPage(); else if (page === "inquiries") initInquiriesPage(); else if (page === "inquiry_detail") initInquiryDetailPage(ds.inquiryId); else if (page === "my_playlists") initMyPlaylistsPage(); else if (page === "my_playlist_detail") initMyPlaylistDetailPage(ds.playlistId); else if (page === "admin_moderation") initAdminModerationPage();
 });
 
 if ("serviceWorker" in navigator) {
