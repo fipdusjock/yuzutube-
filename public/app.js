@@ -1941,13 +1941,22 @@ function initAdminModerationPage() {
   const ngWordUrlInput = document.getElementById("ngWordUrlInput");
   const ngWordUrlImportBtn = document.getElementById("ngWordUrlImportBtn");
   const ngWordStatus = document.getElementById("ngWordStatus");
-  const ngWordListBox = document.getElementById("ngWordList");
+  const ngWordCountBox = document.getElementById("ngWordCount");
+  const ngWordRemoveInput = document.getElementById("ngWordRemoveInput");
+  const ngWordRemoveBtn = document.getElementById("ngWordRemoveBtn");
+  const ngWordClearAllBtn = document.getElementById("ngWordClearAllBtn");
 
   const manualBanIpInput = document.getElementById("manualBanIpInput");
   const manualBanReasonInput = document.getElementById("manualBanReasonInput");
   const manualBanBtn = document.getElementById("manualBanBtn");
   const manualBanStatus = document.getElementById("manualBanStatus");
   const bannedIpsListBox = document.getElementById("bannedIpsList");
+
+  const manualBanEmailInput = document.getElementById("manualBanEmailInput");
+  const manualBanEmailReasonInput = document.getElementById("manualBanEmailReasonInput");
+  const manualBanEmailBtn = document.getElementById("manualBanEmailBtn");
+  const manualBanEmailStatus = document.getElementById("manualBanEmailStatus");
+  const bannedEmailsListBox = document.getElementById("bannedEmailsList");
 
   const banLogFilterInput = document.getElementById("banLogFilterInput");
   const banLogFilterBtn = document.getElementById("banLogFilterBtn");
@@ -1960,25 +1969,44 @@ function initAdminModerationPage() {
     fetch("/proxy/admin/banned-words")
       .then((res) => res.json())
       .then((data) => {
-        const words = data.words || [];
-        ngWordListBox.innerHTML = words.length ? words.map((w) => `
-          <div class="ng-word-row">
-            <span>${escapeHtml(w.word)}</span>
-            <button type="button" class="ng-word-remove-btn" data-id="${w.id}">×</button>
-          </div>`).join("") : '<div class="empty-state">NGワードはまだ登録されていません</div>';
-
-        ngWordListBox.querySelectorAll(".ng-word-remove-btn").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            fetch(`/proxy/admin/banned-words/${btn.dataset.id}`, { method: "DELETE" })
-              .then(() => loadNgWords())
-              .catch(() => alert("削除に失敗しました"));
-          });
-        });
+        // 一覧そのものは表示しない(中身を画面に出さない方針)。件数だけ見せる。
+        ngWordCountBox.textContent = `現在 ${data.count || 0} 件のNGワードが登録されています`;
       })
       .catch(() => {
-        ngWordListBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
+        ngWordCountBox.textContent = "読み込みに失敗しました";
       });
   }
+
+  ngWordRemoveBtn.addEventListener("click", () => {
+    const word = ngWordRemoveInput.value.trim();
+    if (!word) return;
+    fetch("/proxy/admin/banned-words/by-text", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          ngWordStatus.textContent = data.message || data.detail || "削除に失敗しました";
+          return;
+        }
+        ngWordStatus.textContent = "削除しました";
+        ngWordRemoveInput.value = "";
+        loadNgWords();
+      })
+      .catch(() => { ngWordStatus.textContent = "削除に失敗しました(通信エラー)"; });
+  });
+
+  ngWordClearAllBtn.addEventListener("click", () => {
+    if (!window.confirm("登録されているNGワードを全て削除します。本当によろしいですか？この操作は取り消せません。")) return;
+    fetch("/proxy/admin/banned-words/clear-all", { method: "DELETE" })
+      .then(() => {
+        ngWordStatus.textContent = "全て削除しました";
+        loadNgWords();
+      })
+      .catch(() => { ngWordStatus.textContent = "削除に失敗しました(通信エラー)"; });
+  });
 
   function loadBannedIps() {
     fetch("/proxy/admin/banned-ips")
@@ -2004,6 +2032,33 @@ function initAdminModerationPage() {
       })
       .catch(() => {
         bannedIpsListBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
+      });
+  }
+
+  function loadBannedEmails() {
+    fetch("/proxy/admin/banned-emails")
+      .then((res) => res.json())
+      .then((data) => {
+        const emails = data.emails || [];
+        bannedEmailsListBox.innerHTML = emails.length ? emails.map((b) => `
+          <div class="banned-ip-row">
+            <div>
+              <div class="banned-ip-address">${escapeHtml(b.email)}</div>
+              <div class="banned-ip-reason">${escapeHtml(b.reason || "")} ${b.is_manual ? "(手動)" : "(自動)"}</div>
+            </div>
+            <button type="button" class="page-settings-btn secondary" data-email="${escapeHtml(b.email)}">解除</button>
+          </div>`).join("") : '<div class="empty-state">現在BAN中のメールアドレスはありません</div>';
+
+        bannedEmailsListBox.querySelectorAll("button[data-email]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            fetch(`/proxy/admin/banned-emails/${encodeURIComponent(btn.dataset.email)}`, { method: "DELETE" })
+              .then(() => loadBannedEmails())
+              .catch(() => alert("解除に失敗しました"));
+          });
+        });
+      })
+      .catch(() => {
+        bannedEmailsListBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
       });
   }
 
@@ -2100,6 +2155,23 @@ function initAdminModerationPage() {
       .catch(() => { manualBanStatus.textContent = "BANに失敗しました"; });
   });
 
+  manualBanEmailBtn.addEventListener("click", () => {
+    const email = manualBanEmailInput.value.trim();
+    if (!email) return;
+    fetch("/proxy/admin/banned-emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, reason: manualBanEmailReasonInput.value.trim() }),
+    })
+      .then(() => {
+        manualBanEmailInput.value = "";
+        manualBanEmailReasonInput.value = "";
+        manualBanEmailStatus.textContent = "BANしました";
+        loadBannedEmails();
+      })
+      .catch(() => { manualBanEmailStatus.textContent = "BANに失敗しました"; });
+  });
+
   banLogFilterBtn.addEventListener("click", () => loadBanEvents(banLogFilterInput.value.trim()));
   banLogClearBtn.addEventListener("click", () => { banLogFilterInput.value = ""; loadBanEvents(""); });
 
@@ -2114,6 +2186,7 @@ function initAdminModerationPage() {
       bodyBox.hidden = false;
       loadNgWords();
       loadBannedIps();
+      loadBannedEmails();
       loadBanEvents("");
     })
     .catch(() => {
