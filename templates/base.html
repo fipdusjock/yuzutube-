@@ -55,6 +55,10 @@
         <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v11H3V10zM21 12l-3 9H9a2 2 0 0 1-2-2v-9l4-6a2 2 0 0 1 2 2v4h5a2 2 0 0 1 2 2z"/></svg></span>
         <span class="label">高く評価した動画</span>
       </a>
+      <a class="item {{ 'active' if request.path.startswith('/my-playlists') else '' }}" href="/my-playlists">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h12M3 12h12M3 18h8"/><path d="M17 10v9l6-4.5z"/></svg></span>
+        <span class="label">マイプレイリスト</span>
+      </a>
       <hr>
 
       <div class="sidebar-section-title">登録チャンネル</div>
