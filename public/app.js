@@ -530,6 +530,7 @@ function renderVideoInfo(box, info, videoId) {
   }));
   if (info.comment_count) stats.push(`<span class="stat-pill">${icon("comment")}${formatCountJa(info.comment_count)}</span>`);
   stats.push(`<button type="button" class="stat-pill" id="shareBtn">${icon("share")}共有</button>`);
+  stats.push(`<button type="button" class="stat-pill" id="savePlaylistBtn">${icon("playlistStack")}保存</button>`);
   const chapters = (info.chapters || []).map(c => `<div class="chapter-row"><span class="ts">${escapeHtml(formatDuration(Math.floor(c.start_time || 0)))}</span><span>${escapeHtml(c.title || "")}</span></div>`).join("");
   const descStatBoxes = `
     <div class="desc-stat-grid">
@@ -559,6 +560,17 @@ function renderVideoInfo(box, info, videoId) {
       }
     });
   }
+  const savePlaylistBtn = document.getElementById("savePlaylistBtn");
+  if (savePlaylistBtn) {
+    savePlaylistBtn.addEventListener("click", () => {
+      openSavePlaylistModal(videoId, {
+        title: info.title || "",
+        thumbnail: info.thumbnail || "",
+        channel: channelName || "",
+        duration: info.duration || null,
+      });
+    });
+  }
   const descBox = box.querySelector("#descriptionBox");
   const descToggleBtn = box.querySelector("#descToggleBtn");
   if (descBox && descToggleBtn) {
@@ -572,6 +584,112 @@ function renderVideoInfo(box, info, videoId) {
 
 function mediaProxyUrl(videoId, formatId) {
   return `/media/${encodeURIComponent(videoId)}?format_id=${encodeURIComponent(formatId)}`;
+}
+
+function openSavePlaylistModal(videoId, meta) {
+  const existing = document.getElementById("savePlaylistModal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "savePlaylistModal";
+  modal.className = "announcement-modal";
+  modal.innerHTML = `
+    <div class="announcement-backdrop" id="savePlaylistBackdrop"></div>
+    <div class="announcement-box save-playlist-box">
+      <div class="announcement-title">プレイリストに保存</div>
+      <div id="savePlaylistList" class="save-playlist-list"><div class="empty-state">読み込み中…</div></div>
+      <div class="save-playlist-new-row">
+        <input type="text" id="savePlaylistNewName" maxlength="20" placeholder="新しいプレイリスト名(20文字まで)">
+        <button type="button" class="page-settings-btn" id="savePlaylistCreateBtn">作成</button>
+      </div>
+      <button type="button" class="announcement-close-btn" id="savePlaylistCloseBtn">閉じる</button>
+    </div>`;
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  document.getElementById("savePlaylistBackdrop").addEventListener("click", close);
+  document.getElementById("savePlaylistCloseBtn").addEventListener("click", close);
+
+  function loadPlaylists() {
+    fetch("/proxy/playlists")
+      .then((res) => res.json())
+      .then((data) => {
+        const playlists = data.playlists || [];
+        const listBox = document.getElementById("savePlaylistList");
+        if (!listBox) return;
+        if (!playlists.length) {
+          listBox.innerHTML = '<div class="empty-state">プレイリストがまだありません。下から作成してください</div>';
+          return;
+        }
+        listBox.innerHTML = playlists.map((p) => `
+          <label class="save-playlist-item">
+            <input type="checkbox" class="save-playlist-checkbox" data-playlist-id="${p.id}">
+            <span>${escapeHtml(p.name)}</span>
+            <span class="save-playlist-item-count">${p.video_count}本</span>
+          </label>`).join("");
+
+        listBox.querySelectorAll(".save-playlist-checkbox").forEach((checkbox) => {
+          // 既にそのプレイリストに入っているかを確認してチェック状態を初期化する
+          fetch(`/proxy/playlists/${checkbox.dataset.playlistId}`)
+            .then((res) => res.json())
+            .then((detail) => {
+              const already = (detail.videos || []).some((v) => v.video_id === videoId);
+              checkbox.checked = already;
+            })
+            .catch(() => {});
+
+          checkbox.addEventListener("change", () => {
+            const playlistId = checkbox.dataset.playlistId;
+            if (checkbox.checked) {
+              fetch(`/proxy/playlists/${playlistId}/videos`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ video_id: videoId, ...meta }),
+              }).then((res) => res.json()).then((data) => {
+                if (data.message || data.detail) {
+                  alert(data.message || data.detail);
+                  checkbox.checked = false;
+                }
+              }).catch(() => { checkbox.checked = false; });
+            } else {
+              fetch(`/proxy/playlists/${playlistId}/videos/${encodeURIComponent(videoId)}`, { method: "DELETE" }).catch(() => {});
+            }
+          });
+        });
+      })
+      .catch(() => {
+        const listBox = document.getElementById("savePlaylistList");
+        if (listBox) listBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
+      });
+  }
+
+  document.getElementById("savePlaylistCreateBtn").addEventListener("click", () => {
+    const nameInput = document.getElementById("savePlaylistNewName");
+    const name = nameInput.value.trim();
+    if (!name) return;
+    fetch("/proxy/playlists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          alert(data.message || data.detail || "作成に失敗しました");
+          return;
+        }
+        nameInput.value = "";
+        // 作成したプレイリストにこの動画も一緒に入れておく
+        return fetch(`/proxy/playlists/${data.id}/videos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ video_id: videoId, ...meta }),
+        }).then(() => loadPlaylists());
+      })
+      .catch(() => alert("作成に失敗しました(通信エラー)"));
+  });
+
+  loadPlaylists();
 }
 
 function renderNocookieEmbed(wrap, videoId) {
@@ -589,6 +707,10 @@ function renderNocookieEmbed(wrap, videoId) {
 
 function renderPlayer(wrap, stream, info) {
   const videoId = stream.video_id;
+  const urlParams = new URLSearchParams(window.location.search);
+  const listParam = urlParams.get("list") || "";
+  const indexParam = parseInt(urlParams.get("index") || "0", 10);
+  const playlistContext = listParam.startsWith("my:") ? { playlistId: listParam.slice(3), index: indexParam } : null;
   const streams = stream.streams || [];
   const combined = streams.filter(s => s.url && s.vcodec && s.vcodec !== "none" && s.acodec && s.acodec !== "none");
   const videoOnly = streams.filter(s => s.url && s.vcodec && s.vcodec !== "none" && (!s.acodec || s.acodec === "none"));
@@ -672,6 +794,8 @@ function renderPlayer(wrap, stream, info) {
           <button type="button" class="settings-row" data-open="speed"><span>再生速度</span><span class="settings-row-right"><span class="settings-row-value" id="speedValueLabel">標準</span>${icon("chevronRight")}</span></button>
           ${subtitleOptions.length ? `<button type="button" class="settings-row" data-open="subtitles"><span>字幕</span><span class="settings-row-right"><span class="settings-row-value" id="subtitleValueLabel">オフ</span>${icon("chevronRight")}</span></button>` : ""}
           <button type="button" class="settings-row" data-open="info"><span>動画情報</span><span class="settings-row-right">${icon("chevronRight")}</span></button>
+          <button type="button" class="settings-row" id="loopToggleBtn"><span>ループ再生</span><span class="settings-row-right"><span class="settings-row-value" id="loopValueLabel">オフ</span></span></button>
+          ${playlistContext ? `<button type="button" class="settings-row" id="autoplayToggleBtn"><span>自動再生</span><span class="settings-row-right"><span class="settings-row-value" id="autoplayValueLabel">オン</span></span></button>` : ""}
           <a class="settings-row" id="downloadLink" href="${mediaProxyUrl(videoId, (defaultQuality || {}).format_id || "18")}&download=1" download><span>ダウンロード</span></a>
         </div>
         <div class="settings-panel" data-panel="quality" hidden>
@@ -764,7 +888,7 @@ function renderPlayer(wrap, stream, info) {
   } else if (hlsUrl) {
     attachHlsSource(videoEl, hlsUrl);
   }
-  wireCustomPlayerControls(videoEl, playerRoot, syncState);
+  wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContext, videoId);
 
   // ---------- 歯車メニュー ----------
   const settingsBtn = document.getElementById("settingsBtn");
@@ -1021,7 +1145,7 @@ function formatPlayerTime(sec) {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-function wireCustomPlayerControls(videoEl, playerRoot, syncState) {
+function wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContext, currentVideoId) {
   const playBtn = playerRoot.querySelector("#playPauseBtn");
   const seekBar = playerRoot.querySelector("#seekBar");
   const curTimeEl = playerRoot.querySelector("#curTime");
@@ -1189,6 +1313,59 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState) {
 
   videoEl.addEventListener("play", showControls);
   showControls();
+
+  // ---------- ループ再生 ----------
+  const LOOP_KEY = "tubely_loop_enabled";
+  const loopToggleBtn = playerRoot.querySelector("#loopToggleBtn");
+  const loopValueLabel = playerRoot.querySelector("#loopValueLabel");
+  let loopEnabled = localStorage.getItem(LOOP_KEY) === "1";
+  function applyLoopState() {
+    videoEl.loop = loopEnabled;
+    if (syncState.audioEl) syncState.audioEl.loop = loopEnabled;
+    if (loopValueLabel) loopValueLabel.textContent = loopEnabled ? "オン" : "オフ";
+  }
+  applyLoopState();
+  if (loopToggleBtn) {
+    loopToggleBtn.addEventListener("click", () => {
+      loopEnabled = !loopEnabled;
+      localStorage.setItem(LOOP_KEY, loopEnabled ? "1" : "0");
+      applyLoopState();
+    });
+  }
+
+  // ---------- 自動再生(プレイリスト内で次の動画へ進む) ----------
+  const AUTOPLAY_KEY = "tubely_autoplay_enabled";
+  const autoplayToggleBtn = playerRoot.querySelector("#autoplayToggleBtn");
+  const autoplayValueLabel = playerRoot.querySelector("#autoplayValueLabel");
+  let autoplayEnabled = localStorage.getItem(AUTOPLAY_KEY) !== "0"; // 既定はオン(YouTube本家と同様)
+  function applyAutoplayState() {
+    if (autoplayValueLabel) autoplayValueLabel.textContent = autoplayEnabled ? "オン" : "オフ";
+  }
+  applyAutoplayState();
+  if (autoplayToggleBtn) {
+    autoplayToggleBtn.addEventListener("click", () => {
+      autoplayEnabled = !autoplayEnabled;
+      localStorage.setItem(AUTOPLAY_KEY, autoplayEnabled ? "1" : "0");
+      applyAutoplayState();
+    });
+  }
+
+  if (playlistContext) {
+    videoEl.addEventListener("ended", () => {
+      // ループがオンの場合はvideoEl.loopが優先されるので、ここには来ない
+      if (!autoplayEnabled) return;
+      fetch(`/proxy/playlists/${playlistContext.playlistId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          const videos = data.videos || [];
+          const nextIndex = playlistContext.index + 1;
+          if (nextIndex >= videos.length) return; // プレイリストの最後まで来たら何もしない
+          const nextVideo = videos[nextIndex];
+          window.location.href = `/watch?v=${encodeURIComponent(nextVideo.video_id)}&list=my:${playlistContext.playlistId}&index=${nextIndex}`;
+        })
+        .catch(() => {});
+    });
+  }
 }
 
 const CHANNEL_TABS = [ {
@@ -1331,7 +1508,7 @@ async function initPlaylistPage(playlistId) {
   const grid = document.getElementById("playlistGrid");
   try {
     const data = await fetchJSON(`/proxy/playlist/${encodeURIComponent(playlistId)}?limit=100`);
-    header.innerHTML = `\n      <h1 class="section-title">${escapeHtml(truncateText(data.title || "", 150))}</h1>\n      <div style="color:var(--text-secondary); font-size:13px; margin-bottom:24px;">\n        ${escapeHtml(data.uploader || "")}${data.entry_count_total ? " &middot; " + data.entry_count_total + " 本" : ""}\n      </div>`;
+    header.innerHTML = `\n      <div class="youtube-playlist-badge">YouTubeの再生リスト</div>\n      <h1 class="section-title">${escapeHtml(truncateText(data.title || "", 150))}</h1>\n      <div style="color:var(--text-secondary); font-size:13px; margin-bottom:24px;">\n        ${escapeHtml(data.uploader || "")}${data.entry_count_total ? " &middot; " + data.entry_count_total + " 本" : ""}\n      </div>`;
     const entries = data.entries || [];
     grid.innerHTML = entries.length ? entries.map(e => videoCardHTML(e, `/watch?v=${encodeURIComponent(e.video_id)}`)).join("") : '<div class="empty-state">動画が見つかりませんでした。</div>';
   } catch (e) {
@@ -1532,6 +1709,153 @@ function initAccountPage() {
         status.textContent = "保存に失敗しました(通信エラー)";
       });
   });
+}
+
+function initMyPlaylistsPage() {
+  const listBox = document.getElementById("myPlaylistsList");
+  const statusBox = document.getElementById("myPlaylistsStatus");
+  const createBtn = document.getElementById("createPlaylistBtn");
+
+  function load() {
+    fetch("/proxy/playlists")
+      .then((res) => res.json())
+      .then((data) => {
+        const playlists = data.playlists || [];
+        if (!playlists.length) {
+          listBox.innerHTML = '<div class="empty-state">プレイリストはまだありません</div>';
+        } else {
+          listBox.innerHTML = playlists.map((p) => `
+            <a class="my-playlist-card" href="/my-playlists/${p.id}">
+              <div class="my-playlist-card-icon">${icon("playlistStack")}</div>
+              <div class="my-playlist-card-name">${escapeHtml(p.name)}</div>
+              <div class="my-playlist-card-count">${p.video_count} 本の動画</div>
+            </a>`).join("");
+        }
+        statusBox.textContent = `${playlists.length} / ${data.max_count} 個`;
+      })
+      .catch(() => {
+        listBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
+      });
+  }
+
+  createBtn.addEventListener("click", () => {
+    const name = window.prompt("プレイリスト名(20文字まで)");
+    if (name === null) return;
+    fetch("/proxy/playlists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          alert(data.message || data.detail || "作成に失敗しました");
+          return;
+        }
+        load();
+      })
+      .catch(() => alert("作成に失敗しました(通信エラー)"));
+  });
+
+  load();
+}
+
+function initMyPlaylistDetailPage(playlistId) {
+  const heroThumb = document.getElementById("myPlaylistHeroThumb");
+  const titleEl = document.getElementById("myPlaylistTitle");
+  const metaEl = document.getElementById("myPlaylistMeta");
+  const playAllBtn = document.getElementById("myPlaylistPlayAllBtn");
+  const renameBtn = document.getElementById("myPlaylistRenameBtn");
+  const deleteBtn = document.getElementById("myPlaylistDeleteBtn");
+  const videoListBox = document.getElementById("myPlaylistVideoList");
+
+  let currentVideos = [];
+
+  function load() {
+    fetch(`/proxy/playlists/${playlistId}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("failed");
+        return res.json();
+      })
+      .then((data) => {
+        titleEl.textContent = data.playlist.name;
+        currentVideos = data.videos || [];
+        metaEl.textContent = `${currentVideos.length} / ${data.max_videos} 本の動画`;
+        if (currentVideos.length && currentVideos[0].thumbnail) {
+          heroThumb.innerHTML = `<img src="${escapeHtml(currentVideos[0].thumbnail)}" alt="">`;
+        }
+        if (!currentVideos.length) {
+          videoListBox.innerHTML = '<div class="empty-state">このプレイリストには動画がありません</div>';
+          return;
+        }
+        videoListBox.innerHTML = currentVideos.map((v, i) => `
+          <div class="pl-video-row-wrap">
+            <a class="pl-video-row" href="/watch?v=${encodeURIComponent(v.video_id)}&list=my:${playlistId}&index=${i}">
+              <span class="pl-video-index">${i + 1}</span>
+              <span class="pl-video-thumb">
+                ${v.thumbnail ? `<img src="${escapeHtml(v.thumbnail)}" alt="" loading="lazy">` : ""}
+                ${v.duration ? `<span class="duration">${escapeHtml(formatDuration(v.duration))}</span>` : ""}
+              </span>
+              <span class="pl-video-body">
+                <span class="pl-video-title">${escapeHtml(v.title || "(タイトル不明)")}</span>
+                <span class="pl-video-channel">${escapeHtml(v.channel || "")}</span>
+              </span>
+            </a>
+            <button type="button" class="my-playlist-remove-btn" data-video-id="${escapeHtml(v.video_id)}" title="このプレイリストから削除">×</button>
+          </div>`).join("");
+
+        videoListBox.querySelectorAll(".my-playlist-remove-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            fetch(`/proxy/playlists/${playlistId}/videos/${encodeURIComponent(btn.dataset.videoId)}`, { method: "DELETE" })
+              .then(() => load())
+              .catch(() => alert("削除に失敗しました"));
+          });
+        });
+      })
+      .catch(() => {
+        videoListBox.innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
+      });
+  }
+
+  playAllBtn.addEventListener("click", () => {
+    if (!currentVideos.length) return;
+    window.location.href = `/watch?v=${encodeURIComponent(currentVideos[0].video_id)}&list=my:${playlistId}&index=0`;
+  });
+
+  renameBtn.addEventListener("click", () => {
+    const name = window.prompt("新しい名前(20文字まで)", titleEl.textContent);
+    if (name === null) return;
+    fetch(`/proxy/playlists/${playlistId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          alert(data.message || data.detail || "変更に失敗しました");
+          return;
+        }
+        load();
+      })
+      .catch(() => alert("変更に失敗しました(通信エラー)"));
+  });
+
+  deleteBtn.addEventListener("click", () => {
+    if (!window.confirm("本当に削除しますか？この操作は取り消せません。")) return;
+    fetch(`/proxy/playlists/${playlistId}`, { method: "DELETE" })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          alert(data.message || data.detail || "削除に失敗しました");
+          return;
+        }
+        window.location.href = "/my-playlists";
+      })
+      .catch(() => alert("削除に失敗しました(通信エラー)"));
+  });
+
+  load();
 }
 
 function initInquiriesPage() {
@@ -2023,7 +2347,7 @@ document.addEventListener("DOMContentLoaded", () => {
   checkForAnnouncement();
   const ds = document.body.dataset;
   const page = ds.page;
-  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage(); else if (page === "account") initAccountPage(); else if (page === "inquiries") initInquiriesPage(); else if (page === "inquiry_detail") initInquiryDetailPage(ds.inquiryId);
+  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage(); else if (page === "account") initAccountPage(); else if (page === "inquiries") initInquiriesPage(); else if (page === "inquiry_detail") initInquiryDetailPage(ds.inquiryId); else if (page === "my_playlists") initMyPlaylistsPage(); else if (page === "my_playlist_detail") initMyPlaylistDetailPage(ds.playlistId);
 });
 
 if ("serviceWorker" in navigator) {

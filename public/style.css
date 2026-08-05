@@ -1508,6 +1508,80 @@ button.stat-pill { cursor: pointer; }
 }
 .announcement-close-btn:hover { filter: brightness(1.08); }
 
+.my-playlists-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+.my-playlist-card {
+  background: var(--bg-elevated);
+  border-radius: 12px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.my-playlist-card:hover { background: var(--bg-hover); }
+.my-playlist-card-icon { width: 32px; height: 32px; color: var(--text-secondary); }
+.my-playlist-card-name { font-size: 14px; font-weight: 600; word-break: break-word; }
+.my-playlist-card-count { font-size: 12px; color: var(--text-secondary); }
+.my-playlist-badge {
+  display: inline-block;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.youtube-playlist-badge {
+  display: inline-block;
+  background: rgba(255,0,51,0.12);
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.pl-video-row-wrap { display: flex; align-items: center; gap: 4px; }
+.pl-video-row-wrap .pl-video-row { flex: 1; }
+.my-playlist-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 8px;
+  flex-shrink: 0;
+}
+.my-playlist-remove-btn:hover { color: var(--red); }
+
+.save-playlist-box { text-align: left; max-width: 380px; }
+.save-playlist-list { max-height: 240px; overflow-y: auto; margin-bottom: 14px; }
+.save-playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  cursor: pointer;
+}
+.save-playlist-item:last-child { border-bottom: none; }
+.save-playlist-item-count { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+.save-playlist-new-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.save-playlist-new-row input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+}
+
 .update-banner {
   position: fixed;
   right: 16px;
