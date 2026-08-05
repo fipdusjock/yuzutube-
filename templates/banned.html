@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}アクセス制限中 - {{ site_name }}{% endblock %}
+{% block page_id %}banned{% endblock %}
+{% block content %}
+<div class="banned-page">
+  <div class="banned-icon">🚫</div>
+  <h1 class="section-title">アクセスが制限されています</h1>
+  <p class="banned-message">
+    このIPアドレスは、利用規約に反する操作(不適切な検索・動画の視聴など)が検知されたため、
+    利用を制限されています。
+  </p>
+  <p class="banned-message">
+    誤って制限されたと思われる場合は、お問い合わせフォームからご連絡ください。
+    内容を確認のうえ対応します。
+  </p>
+  <a href="/inquiries" class="page-settings-btn">お問い合わせフォームへ</a>
+</div>
+{% endblock %}
