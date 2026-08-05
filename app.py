@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -269,6 +269,16 @@ def inquiry_detail_page(inquiry_id):
     return render_template("inquiry_detail.html", inquiry_id=inquiry_id)
 
 
+@app.route("/admin/moderation")
+def admin_moderation_page():
+    return render_template("admin_moderation.html")
+
+
+@app.route("/banned")
+def banned_page():
+    return render_template("banned.html")
+
+
 @app.route("/my-playlists")
 def my_playlists_page():
     return render_template("my_playlists.html")
@@ -364,6 +374,7 @@ _AUTH_EXEMPT_PATHS = {
     "/login", "/signup", "/logout", "/style.css", "/app.js", "/auth.css", "/favicon.ico",
     "/favicon.svg", "/favicon-16.png", "/favicon-32.png", "/manifest.json", "/sw.js",
     "/api/auth/login", "/api/auth/signup", "/changelog", "/api/frontend-version", "/api/announcement",
+    "/banned",
 }
 _AUTH_EXEMPT_PREFIXES = ("/icons/",)
 
@@ -382,6 +393,45 @@ def _current_user_email():
     if resp.status_code != 200:
         return None
     return resp.json().get("email")
+
+
+_BAN_EXEMPT_PATHS = {
+    "/banned", "/login", "/signup", "/logout", "/style.css", "/app.js", "/auth.css",
+    "/favicon.ico", "/favicon.svg", "/favicon-16.png", "/favicon-32.png", "/manifest.json", "/sw.js",
+    "/api/frontend-version", "/api/announcement",
+}
+_BAN_EXEMPT_PREFIXES = ("/icons/", "/inquiries", "/proxy/inquiries", "/proxy/user/me")
+
+
+@app.before_request
+def _enforce_ip_ban():
+    """
+    BANされたIPからのアクセスは、お問い合わせ・ログイン・プロフィール確認の
+    最低限のページ以外は「BANされました」という案内ページに誘導する。
+    ログイン要求(_require_login)より先に判定する
+    (ログインしていないBAN済みユーザーが、ただのログイン画面に見えてしまわないように)。
+    """
+    path = request.path
+    if path in _BAN_EXEMPT_PATHS or path.startswith(_BAN_EXEMPT_PREFIXES):
+        return None
+
+    client_ip = _client_ip()
+    api_base = _resolve_api_base()
+    try:
+        resp = requests.get(
+            f"{api_base}/api/ban/check",
+            headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": client_ip},
+            timeout=PROXY_TIMEOUT,
+        )
+        banned = resp.status_code == 200 and resp.json().get("banned")
+    except requests.RequestException:
+        banned = False  # バックエンドに確認できない場合は、誤って全員弾かないよう素通りさせる
+
+    if not banned:
+        return None
+    if path.startswith("/proxy/") or path.startswith("/media/") or path.startswith("/api/"):
+        return jsonify({"error": True, "message": "このIPアドレスは利用を制限されています。お問い合わせフォームからご連絡ください。"}), 403
+    return redirect(url_for("banned_page"))
 
 
 @app.before_request
@@ -589,6 +639,70 @@ def proxy_playlist_add_video(playlist_id):
 @app.route("/proxy/playlists/<int:playlist_id>/videos/<video_id>", methods=["DELETE"])
 def proxy_playlist_remove_video(playlist_id, video_id):
     return _proxy_user_api(f"/api/playlists/{playlist_id}/videos/{video_id}", "DELETE")
+
+
+@app.route("/proxy/admin/banned-words", methods=["GET", "POST"])
+def proxy_banned_words():
+    if request.method == "GET":
+        return _proxy_user_api("/api/admin/banned-words")
+    return _proxy_user_api("/api/admin/banned-words", "POST", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/admin/banned-words/bulk", methods=["POST"])
+def proxy_banned_words_bulk():
+    return _proxy_user_api("/api/admin/banned-words/bulk", "POST", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/admin/banned-words/import-url", methods=["POST"])
+def proxy_banned_words_import_url():
+    return _proxy_user_api("/api/admin/banned-words/import-url", "POST", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/admin/banned-words/<int:word_id>", methods=["DELETE"])
+def proxy_banned_word_delete(word_id):
+    return _proxy_user_api(f"/api/admin/banned-words/{word_id}", "DELETE")
+
+
+@app.route("/proxy/admin/banned-ips", methods=["GET", "POST"])
+def proxy_banned_ips():
+    if request.method == "GET":
+        return _proxy_user_api("/api/admin/banned-ips")
+    return _proxy_user_api("/api/admin/banned-ips", "POST", request.get_json(silent=True) or {})
+
+
+@app.route("/proxy/admin/banned-ips/<path:ip>", methods=["DELETE"])
+def proxy_banned_ip_delete(ip):
+    return _proxy_user_api(f"/api/admin/banned-ips/{ip}", "DELETE")
+
+
+@app.route("/proxy/admin/ban-events", methods=["GET"])
+def proxy_ban_events():
+    ip = request.args.get("ip", "")
+    email = request.args.get("email", "")
+    path = "/api/admin/ban-events"
+    params = []
+    if ip:
+        params.append(f"ip={ip}")
+    if email:
+        params.append(f"email={email}")
+    if params:
+        path += "?" + "&".join(params)
+    return _proxy_user_api(path)
+
+
+@app.route("/proxy/moderation/check-search", methods=["POST"])
+def proxy_check_search_moderation():
+    """検索実行前のNGワードチェック。ログイン不要で誰でも呼べる
+    (バックエンド側のcheck_search_moderation_endpointもログイン不要な設計になっている)。"""
+    api_base = _resolve_api_base()
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()}
+    body = request.get_json(silent=True) or {}
+    resp = requests.post(f"{api_base}/api/moderation/check-search", json=body, headers=headers, timeout=PROXY_TIMEOUT)
+    try:
+        data = resp.json()
+    except ValueError:
+        return jsonify({"blocked": False}), 200
+    return jsonify(data), resp.status_code
 
 
 @app.route("/proxy/search")
