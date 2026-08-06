@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -710,6 +710,13 @@ def proxy_ban_events():
     if params:
         path += "?" + "&".join(params)
     return _proxy_user_api(path)
+
+
+@app.route("/proxy/admin/moderation-policy", methods=["GET", "PUT"])
+def proxy_moderation_policy():
+    if request.method == "GET":
+        return _proxy_user_api("/api/admin/moderation-policy")
+    return _proxy_user_api("/api/admin/moderation-policy", "PUT", request.get_json(silent=True) or {})
 
 
 @app.route("/proxy/moderation/check-search", methods=["POST"])
