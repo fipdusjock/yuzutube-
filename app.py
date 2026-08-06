@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -108,7 +108,12 @@ def do_signup():
     try:
         resp = requests.post(
             f"{api_base}/api/auth/signup",
-            json={"email": body.get("email", ""), "password": body.get("password", ""), "ip": _client_ip()},
+            json={
+                "email": body.get("email", ""),
+                "password": body.get("password", ""),
+                "agreed_to_terms": body.get("agreed_to_terms", False),
+                "ip": _client_ip(),
+            },
             headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()},
             timeout=PROXY_TIMEOUT,
         )
