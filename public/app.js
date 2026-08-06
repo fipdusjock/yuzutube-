@@ -1965,6 +1965,40 @@ function initAdminModerationPage() {
 
   const EVENT_LABELS = { auto_ban: "自動BAN", manual_ban: "手動BAN", unban: "解除" };
 
+  const aiStatusLabel = document.getElementById("aiStatusLabel");
+  const moderationPolicyInput = document.getElementById("moderationPolicyInput");
+  const moderationPolicySaveBtn = document.getElementById("moderationPolicySaveBtn");
+  const moderationPolicyStatus = document.getElementById("moderationPolicyStatus");
+
+  function loadModerationPolicy() {
+    fetch("/proxy/admin/moderation-policy")
+      .then((res) => res.json())
+      .then((data) => {
+        moderationPolicyInput.value = data.policy || "";
+        aiStatusLabel.textContent = data.ai_enabled
+          ? `AI判定は有効です(モデル: ${data.model})`
+          : "AIのAPIキーが未設定のため、判定基準を書いてもAI判定は動作しません(サーバー側の設定が必要です)";
+      })
+      .catch(() => {
+        aiStatusLabel.textContent = "読み込みに失敗しました";
+      });
+  }
+
+  moderationPolicySaveBtn.addEventListener("click", () => {
+    moderationPolicyStatus.textContent = "保存中…";
+    fetch("/proxy/admin/moderation-policy", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policy: moderationPolicyInput.value }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        moderationPolicyStatus.textContent = ok ? "保存しました" : (data.message || data.detail || "保存に失敗しました");
+      })
+      .catch(() => { moderationPolicyStatus.textContent = "保存に失敗しました(通信エラー)"; });
+  });
+
+
   function loadNgWords() {
     fetch("/proxy/admin/banned-words")
       .then((res) => res.json())
@@ -2184,6 +2218,7 @@ function initAdminModerationPage() {
         return;
       }
       bodyBox.hidden = false;
+      loadModerationPolicy();
       loadNgWords();
       loadBannedIps();
       loadBannedEmails();
