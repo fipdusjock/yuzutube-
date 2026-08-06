@@ -7,6 +7,25 @@
 
 <div id="adminModerationBody" hidden>
   <div class="page-settings-group">
+    <div class="page-settings-group-title">AIによる動画タイトル判定(任意)</div>
+    <div class="page-settings-card">
+      <div class="account-status" id="aiStatusLabel"></div>
+      <div class="account-field">
+        <label for="moderationPolicyInput">判定基準</label>
+        <textarea id="moderationPolicyInput" rows="4" placeholder="例: 暴力的な表現、性的な内容、差別的な言葉が含まれるタイトルは不適切と判断してください"></textarea>
+        <div class="ng-word-count">
+          ここに書いた基準文をもとに、NGワードに引っかからなかったタイトルもAI(Gemini)が
+          追加でチェックします。空欄のままならAI判定は行われず、NGワードだけで判定します。
+        </div>
+      </div>
+      <div class="page-settings-controls">
+        <button type="button" class="page-settings-btn" id="moderationPolicySaveBtn">保存</button>
+      </div>
+      <div class="account-status" id="moderationPolicyStatus"></div>
+    </div>
+  </div>
+
+  <div class="page-settings-group">
     <div class="page-settings-group-title">NGワード</div>
     <div class="page-settings-card">
       <div class="account-field">
