@@ -1519,6 +1519,11 @@ button.stat-pill { cursor: pointer; }
 .banned-icon { width: 48px; height: 48px; margin: 0 auto 16px; color: var(--text-secondary); }
 .banned-message { color: var(--text-secondary); font-size: 14px; line-height: 1.7; margin-bottom: 16px; }
 
+.terms-body { max-width: 720px; font-size: 14px; line-height: 1.8; color: var(--text-secondary); }
+.terms-body h2 { color: var(--text); font-size: 16px; margin: 24px 0 8px; }
+.terms-body ul { padding-left: 20px; margin: 8px 0; }
+.terms-body li { margin-bottom: 4px; }
+
 .announcement-modal {
   position: fixed;
   inset: 0;
