@@ -8,11 +8,6 @@
   <link rel="stylesheet" href="/auth.css">
 </head>
 <body class="auth-body">
-  <div class="auth-bg">
-    <div class="auth-orb auth-orb-1"></div>
-    <div class="auth-orb auth-orb-2"></div>
-  </div>
-
   <main class="auth-shell">
     <a class="auth-brand" href="/login">
       <span class="auth-brand-mark">柚</span>
@@ -20,7 +15,7 @@
     </a>
 
     <div class="auth-card">
-      <h1 class="auth-title">はじめまして</h1>
+      <h1 class="auth-title">アカウント作成</h1>
       <p class="auth-sub">メールアドレスとパスワードでアカウントを作成します</p>
 
       <form class="auth-form" id="signupForm" novalidate>
@@ -31,6 +26,11 @@
         <label class="auth-field">
           <span>パスワード</span>
           <input type="password" name="password" id="password" autocomplete="new-password" required placeholder="8文字以上" minlength="8">
+        </label>
+
+        <label class="auth-checkbox-field">
+          <input type="checkbox" id="agreeTerms" required>
+          <span><a href="/terms" target="_blank" rel="noopener">利用規約</a>に同意します</span>
         </label>
 
         <div class="auth-error" id="authError" hidden></div>
@@ -61,6 +61,11 @@ form.addEventListener("submit", async (e) => {
     errorBox.hidden = false;
     return;
   }
+  if (!document.getElementById("agreeTerms").checked) {
+    errorBox.textContent = "利用規約への同意が必要です";
+    errorBox.hidden = false;
+    return;
+  }
 
   submitBtn.disabled = true;
   submitBtn.classList.add("loading");
@@ -72,6 +77,7 @@ form.addEventListener("submit", async (e) => {
       body: JSON.stringify({
         email: document.getElementById("email").value.trim(),
         password,
+        agreed_to_terms: true,
       }),
     });
     const data = await res.json();
