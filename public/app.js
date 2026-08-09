@@ -457,15 +457,27 @@ async function initWatchPage(videoId) {
   // (yt-dlp側の重い抽出処理・Node.jsでの署名解読が動画1本につき2回走っていたのを
   // 1回に減らせる)。
   const useNocookieEmbed = localStorage.getItem(USE_NOCOOKIE_EMBED_KEY) === "1";
-  const streamPromise = fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`);
+
+  // まず高速版(android_vrクライアント、Node.js不要)を試す。360p相当のみだが
+  // 数秒で結果が返ってくるので、まずこれで再生を始めてしまう。
+  // 通常版(全画質・Node.jsでの署名解読)は裏で並行して走らせておき、届いたら
+  // 再生位置を保ったまま画質選択肢だけ差し替える。
+  const fastPromise = useNocookieEmbed ? Promise.resolve({ ok: false }) : fetchJSON(`/proxy/stream-fast/${encodeURIComponent(videoId)}`).catch(() => ({ ok: false }));
+  const fullPromise = fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`);
+
   try {
-    const stream = await streamPromise;
+    const fastResult = await fastPromise;
+    const usedFast = !!(fastResult && fastResult.ok);
+    const stream = usedFast ? fastResult : await fullPromise;
     const info = stream;
     renderVideoInfo(infoBox, info, videoId);
     if (useNocookieEmbed) {
       renderNocookieEmbed(playerWrap, videoId);
     } else {
       renderPlayer(playerWrap, stream, info);
+      if (usedFast) {
+        upgradePlayerWhenFullStreamReady(playerWrap, fullPromise);
+      }
     }
     document.title = info.title ? `${info.title} - ${document.title.split(" - ").pop()}` : document.title;
     addHistory({
@@ -711,6 +723,29 @@ function renderNocookieEmbed(wrap, videoId) {
         referrerpolicy="strict-origin-when-cross-origin"
         allowfullscreen></iframe>
     </div>`;
+}
+
+function upgradePlayerWhenFullStreamReady(wrap, fullPromise) {
+  fullPromise.then((fullStream) => {
+    const videoEl = wrap.querySelector("#player");
+    if (!videoEl) return; // 既にページを離れた等
+
+    const savedTime = videoEl.currentTime || 0;
+    const wasPaused = videoEl.paused;
+
+    renderPlayer(wrap, fullStream, fullStream);
+
+    const newVideoEl = wrap.querySelector("#player");
+    if (!newVideoEl) return;
+    const resume = () => {
+      newVideoEl.currentTime = savedTime;
+      if (!wasPaused) newVideoEl.play().catch(() => {});
+      newVideoEl.removeEventListener("loadedmetadata", resume);
+    };
+    newVideoEl.addEventListener("loadedmetadata", resume);
+  }).catch(() => {
+    // 通常版が取れなくても、既に高速版で再生できているのでそのまま何もしない
+  });
 }
 
 function renderPlayer(wrap, stream, info) {
