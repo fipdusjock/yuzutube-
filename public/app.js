@@ -462,7 +462,10 @@ async function initWatchPage(videoId) {
   // 数秒で結果が返ってくるので、まずこれで再生を始めてしまう。
   // 通常版(全画質・Node.jsでの署名解読)は裏で並行して走らせておき、届いたら
   // 再生位置を保ったまま画質選択肢だけ差し替える。
-  const fastPromise = useNocookieEmbed ? Promise.resolve({ ok: false }) : fetchJSON(`/proxy/stream-fast/${encodeURIComponent(videoId)}`).catch(() => ({ ok: false }));
+  // 【一時的に無効化中】android_vr由来のURLが、ブラウザから直接アクセスすると
+  // 再生できないケースが確認されたため、原因調査が終わるまで通常方式のみを使う。
+  const FAST_PATH_ENABLED = false;
+  const fastPromise = (!FAST_PATH_ENABLED || useNocookieEmbed) ? Promise.resolve({ ok: false }) : fetchJSON(`/proxy/stream-fast/${encodeURIComponent(videoId)}`).catch(() => ({ ok: false }));
   const fullPromise = fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`);
 
   try {
@@ -476,7 +479,7 @@ async function initWatchPage(videoId) {
     } else {
       renderPlayer(playerWrap, stream, info);
       if (usedFast) {
-        upgradePlayerWhenFullStreamReady(playerWrap, fullPromise);
+        upgradePlayerWhenFullStreamReady(playerWrap, fullPromise, infoBox, videoId);
       }
     }
     document.title = info.title ? `${info.title} - ${document.title.split(" - ").pop()}` : document.title;
@@ -725,7 +728,7 @@ function renderNocookieEmbed(wrap, videoId) {
     </div>`;
 }
 
-function upgradePlayerWhenFullStreamReady(wrap, fullPromise) {
+function upgradePlayerWhenFullStreamReady(wrap, fullPromise, infoBox, videoId) {
   fullPromise.then((fullStream) => {
     const videoEl = wrap.querySelector("#player");
     if (!videoEl) return; // 既にページを離れた等
@@ -734,6 +737,7 @@ function upgradePlayerWhenFullStreamReady(wrap, fullPromise) {
     const wasPaused = videoEl.paused;
 
     renderPlayer(wrap, fullStream, fullStream);
+    if (infoBox) renderVideoInfo(infoBox, fullStream, videoId);
 
     const newVideoEl = wrap.querySelector("#player");
     if (!newVideoEl) return;
