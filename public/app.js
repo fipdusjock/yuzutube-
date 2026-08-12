@@ -912,7 +912,7 @@ function renderPlayer(wrap, stream, info) {
   } else if (hlsUrl) {
     attachHlsSource(videoEl, hlsUrl);
   }
-  wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContext, videoId);
+  wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContext, videoId, isLive);
 
   // ---------- 歯車メニュー ----------
   const settingsBtn = document.getElementById("settingsBtn");
@@ -1169,7 +1169,7 @@ function formatPlayerTime(sec) {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-function wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContext, currentVideoId) {
+function wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContext, currentVideoId, isLive) {
   // ループ再生・自動再生は、この関数の他の処理(画質/字幕まわり等)で万一エラーが
   // 起きても巻き込まれて動かなくなることが無いよう、あえて一番最初に配線しておく。
   const LOOP_KEY = "tubely_loop_enabled";
