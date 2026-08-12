@@ -716,6 +716,7 @@ function renderNocookieEmbed(wrap, videoId) {
 
 function renderPlayer(wrap, stream, info) {
   const videoId = stream.video_id;
+  const isLive = !!(info.is_live || stream.is_live || info.live_status === "is_live");
   const urlParams = new URLSearchParams(window.location.search);
   const listParam = urlParams.get("list") || "";
   const indexParam = parseInt(urlParams.get("index") || "0", 10);
@@ -861,18 +862,32 @@ function renderPlayer(wrap, stream, info) {
     attachWithFallback(audioEl, audioQuality.url, audioQuality.format_id);
     const resync = () => {
       if (!syncState.audioEl) return;
-      const drift = videoEl.currentTime - syncState.audioEl.currentTime;
+      const audioEl = syncState.audioEl;
+      // 映像・音声のどちらかがまだバッファリング中(ネットワーク待ち)の時に
+      // ドリフト補正をかけると、ズレの数値自体が「バッファ待ちで進んでいない
+      // だけ」の誤検知になり、無駄なジャンプ・音切れの原因になっていた。
+      // readyState 3(HAVE_FUTURE_DATA)未満、つまりこの先再生を続けられる
+      // データがまだ揃っていない状態の時は、補正を1回休む。
+      if (videoEl.readyState < 3 || audioEl.readyState < 3) return;
+      const drift = videoEl.currentTime - audioEl.currentTime;
       const absDrift = Math.abs(drift);
-      if (absDrift > 1) {
-        syncState.audioEl.currentTime = videoEl.currentTime;
-        syncState.audioEl.playbackRate = 1;
-      } else if (absDrift > .15) {
-        syncState.audioEl.playbackRate = drift > 0 ? 1.05 : .95;
+      if (absDrift > 2) {
+        // 大きくズレた場合のみ、シーク(currentTime代入)で瞬間移動させる。
+        // シークはブラウザ内部でのデコードやり直しが発生し、必ず一瞬の
+        // 音切れを伴うため、閾値を高めにして頻発しないようにしている。
+        audioEl.currentTime = videoEl.currentTime;
+        audioEl.playbackRate = 1;
+      } else if (absDrift > .3) {
+        // 小さなズレは、playbackRateをわずかに変えて滑らかに追従させる
+        // (シークを伴わないので音切れしない)。
+        audioEl.playbackRate = drift > 0 ? 1.03 : .97;
       } else {
-        syncState.audioEl.playbackRate = 1;
+        audioEl.playbackRate = 1;
       }
     };
-    syncState.intervalId = setInterval(resync, 500);
+    // 500ms間隔だと、ちょっとした回線の揺らぎにも過敏に反応してジャンプ
+    // しがちだったため、1000ms間隔に緩和した。
+    syncState.intervalId = setInterval(resync, 1000);
   }
   function loadSource(quality, resumePlayback) {
     stopAudioSync();
@@ -1228,7 +1243,8 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContex
   function updateSeekBarFill(pct) {
     seekBar.style.background = `linear-gradient(to right, #ff0033 0%, #ff0033 ${pct}%, rgba(255,255,255,0.3) ${pct}%, rgba(255,255,255,0.3) 100%)`;
   }
-  updateSeekBarFill(0);
+  updateSeekBarFill(isLive ? 100 : 0);
+  if (isLive) seekBar.value = 100;
   function togglePlay() {
     if (videoEl.paused) {
       videoEl.play().catch(() => {});
@@ -1252,6 +1268,17 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContex
   });
   videoEl.addEventListener("timeupdate", () => {
     curTimeEl.textContent = formatPlayerTime(videoEl.currentTime);
+    if (isLive) {
+      // ライブ配信は「今どこまで見たか」ではなく「配信の最新地点にいるか」を示す
+      // のが本家YouTubeの見た目(赤いバーは常にマックス)。durationがInfinity/NaNに
+      // なりがちなライブ配信では、videoEl.durationベースの割合計算が意味を持たない
+      // ため、常に100%で固定表示する。
+      if (!seeking) {
+        seekBar.value = 100;
+        updateSeekBarFill(100);
+      }
+      return;
+    }
     if (!seeking && videoEl.duration) {
       const pct = videoEl.currentTime / videoEl.duration * 100;
       seekBar.value = pct;
