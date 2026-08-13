@@ -346,6 +346,12 @@ main.content {
   font-weight: 700;
   letter-spacing: 0.5px;
 }
+.thumb-wrap .upcoming-badge {
+  right: auto;
+  left: 6px;
+  background: #1976d2;
+  font-weight: 600;
+}
 
 .playlist-card .thumb-wrap { position: relative; }
 .playlist-card .thumb-wrap::after {
@@ -885,14 +891,72 @@ button.stat-pill { cursor: pointer; }
   font-size: 13px;
 }
 .live-chat-box .chat-row {
-  padding: 4px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
   line-height: 1.5;
   border-bottom: 1px solid var(--border);
+}
+.live-chat-box .chat-row-highlight {
+  background: rgba(255, 202, 40, 0.12);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 2px 0;
+  border-bottom: none;
+}
+.live-chat-box .chat-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.live-chat-box .chat-row-body { flex: 1; min-width: 0; }
+.live-chat-box .chat-row-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 2px;
 }
 .live-chat-box .chat-row .author {
   font-weight: 600;
   color: var(--accent);
-  margin-right: 6px;
+}
+.live-chat-box .chat-row-text {
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.live-chat-box .chat-emoji {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  display: inline-block;
+  margin: 0 1px;
+}
+.live-chat-box .chat-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #fff;
+}
+.live-chat-box .chat-badge-owner { background: #ffa726; }
+.live-chat-box .chat-badge-mod { background: #29b6f6; }
+.live-chat-box .chat-badge-member { background: #66bb6a; }
+.live-chat-box .chat-type-label {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.live-chat-box .chat-amount {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffa726;
 }
 .live-chat-box .chat-note {
   color: var(--text-secondary);

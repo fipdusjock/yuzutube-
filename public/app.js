@@ -324,14 +324,34 @@ function playlistCardHTML(e) {
     </a>`;
 }
 
+function formatUpcomingLabel(releaseTimestamp) {
+  if (!releaseTimestamp) return "配信予定";
+  const diffMs = releaseTimestamp * 1000 - Date.now();
+  if (diffMs <= 0) return "配信予定";
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 60) return `${diffMin}分後に配信`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}時間後に配信`;
+  const diffDay = Math.round(diffHour / 24);
+  return `${diffDay}日後に配信`;
+}
+
 function videoCardHTML(e, watchHref, options) {
   if (e.entry_type === "playlist") return playlistCardHTML(e);
   const vertical = options && options.vertical;
   const isLive = e.live_status === "is_live";
-  const badge = isLive ? `<span class="duration live-badge">LIVE</span>` : e.duration ? `<span class="duration">${escapeHtml(formatDuration(e.duration))}</span>` : "";
+  const isUpcoming = e.live_status === "is_upcoming";
+  let badge = "";
+  if (isLive) {
+    badge = `<span class="duration live-badge">LIVE</span>`;
+  } else if (isUpcoming) {
+    badge = `<span class="duration upcoming-badge">${escapeHtml(formatUpcomingLabel(e.release_timestamp))}</span>`;
+  } else if (e.duration) {
+    badge = `<span class="duration">${escapeHtml(formatDuration(e.duration))}</span>`;
+  }
   const views = e.view_count ? formatViews(e.view_count) : e.view_count_text || "";
   const avatarHTML = e.channel_thumbnail ? `<img src="${escapeHtml(e.channel_thumbnail)}" alt="" loading="lazy">` : escapeHtml((e.channel || "?")[0] || "?");
-  return `\n    <a class="card ${vertical ? "card-vertical" : ""}" href="${watchHref}">\n      <div class="thumb-wrap ${vertical ? "thumb-wrap-vertical" : ""}">\n        ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}\n        ${badge}\n      </div>\n      <div class="meta">\n        <div class="avatar">${avatarHTML}</div>\n        <div>\n          <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>\n          <div class="sub">${escapeHtml(e.channel || "")}${isLive ? "" : views ? " &middot; " + escapeHtml(views) : ""}</div>\n        </div>\n      </div>\n    </a>`;
+  return `\n    <a class="card ${vertical ? "card-vertical" : ""}" href="${watchHref}">\n      <div class="thumb-wrap ${vertical ? "thumb-wrap-vertical" : ""}">\n        ${e.thumbnail ? `<img src="${escapeHtml(e.thumbnail)}" loading="lazy" alt="">` : ""}\n        ${badge}\n      </div>\n      <div class="meta">\n        <div class="avatar">${avatarHTML}</div>\n        <div>\n          <div class="title">${escapeHtml(truncateText(e.title, 100))}</div>\n          <div class="sub">${escapeHtml(e.channel || "")}${(isLive || isUpcoming) ? "" : views ? " &middot; " + escapeHtml(views) : ""}</div>\n        </div>\n      </div>\n    </a>`;
 }
 
 function relatedCardHTML(e) {
