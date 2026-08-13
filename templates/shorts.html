@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ site_name }}{% endblock %}
+{% block page_id %}shorts{% endblock %}
+{% block body_data %}data-video-id="{{ video_id }}"{% endblock %}
+{% block content %}
+<div class="shorts-page">
+  <div class="shorts-card" id="shortsFeed" data-video-id="{{ video_id }}">
+    <div class="shorts-video-wrap">
+      <div class="sk" style="width:100%; height:100%;"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
