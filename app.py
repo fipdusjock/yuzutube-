@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "UxlOJSBLw4gpmbzM2TIN9HyMHM3icj4Hwl8fT45AGNlvkp0V")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -239,6 +239,16 @@ def watch():
     if len(video_id) != 11 and video_id.startswith(_PLAYLIST_ID_PREFIXES):
         return redirect(url_for("playlist", list=video_id))
     return render_template("watch.html", video_id=video_id)
+
+
+@app.route("/shorts/<video_id>")
+def shorts(video_id):
+    """
+    縦スクロールでショートを次々見ていく専用ページ。
+    最初の1本目はサーバー側でも動画IDを埋め込んでおくが、以降のスクロールは
+    全部JS側(app.js)で完結する(次のショート一覧を取得→先読み→切り替え)。
+    """
+    return render_template("shorts.html", video_id=video_id)
 
 
 @app.route("/channel/<channel_id>")
@@ -880,6 +890,59 @@ def media_proxy(video_id):
         if h in upstream.headers:
             passthrough_headers[h] = upstream.headers[h]
     passthrough_headers.setdefault("Accept-Ranges", "bytes")
+    passthrough_headers.setdefault("Content-Type", "video/mp4")
+
+    def gen():
+        try:
+            for chunk in upstream.iter_content(262144):
+                if chunk:
+                    yield chunk
+        except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError):
+            pass
+        finally:
+            upstream.close()
+
+    return Response(gen(), status=upstream.status_code, headers=passthrough_headers)
+
+
+@app.route("/media-muxed/<video_id>")
+def media_muxed_proxy(video_id):
+    """
+    /api/muxed-stream(FFmpegでその場で映像+音声を結合するエンドポイント)専用の
+    中継。media_proxy(通常の/api/proxy-stream中継)とほぼ同じ形だが、
+    Rangeヘッダは転送しない(FFmpegのパイプ出力はシーク不可なストリームのため、
+    途中からの範囲リクエストには対応できない)。
+    """
+    format_id = request.args.get("format_id", "")
+    if not format_id:
+        abort(400, description="format_idが必要です")
+    download = request.args.get("download", "0")
+    api_base = _resolve_api_base()
+    upstream_url = f"{api_base}/api/muxed-stream/{video_id}"
+
+    fwd_headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
+
+    try:
+        upstream = requests.get(
+            upstream_url,
+            params={"format_id": format_id, "download": download},
+            headers=fwd_headers,
+            stream=True,
+            timeout=MEDIA_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        app.logger.error("media-muxed proxy fetch failed: %s -> %s", video_id, e)
+        abort(502, description="動画データの取得に失敗しました")
+
+    if upstream.status_code >= 400:
+        app.logger.error("media-muxed proxy upstream error: %s -> HTTP %s", video_id, upstream.status_code)
+        upstream.close()
+        abort(502, description="動画データの取得に失敗しました")
+
+    passthrough_headers = {}
+    for h in ("Content-Type", "Content-Disposition"):
+        if h in upstream.headers:
+            passthrough_headers[h] = upstream.headers[h]
     passthrough_headers.setdefault("Content-Type", "video/mp4")
 
     def gen():
