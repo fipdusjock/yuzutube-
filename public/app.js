@@ -465,6 +465,196 @@ async function initResultsPage(query) {
   await load();
 }
 
+// --- ショート(縦スクロール視聴) ------------------------------------------
+//
+// 「次々スクロールしても取得が追いつかない」問題への対策として、常に
+// 今見ているショートの裏で、次の2本分を先読み(プリフェッチ)しておく方式。
+// スクロールしてきた時には既に取得が終わっているので、すぐ切り替えられる。
+// (実機検証の結果、フォーマットを1つに絞っても抽出自体は速くならないことが
+// 分かったため、通常の/api/streamをそのまま使い、先読みだけで体感速度を稼ぐ)
+
+const SHORTS_PREFETCH_COUNT = 2;
+const SHORTS_QUEUE_REFILL_THRESHOLD = 3;
+
+function initShortsPage(initialVideoId) {
+  const feed = document.getElementById("shortsFeed");
+  if (!feed || !initialVideoId) return;
+
+  const state = {
+    queue: [],
+    seen: new Set([initialVideoId]),
+    cache: new Map(),
+    currentVideoId: initialVideoId,
+    loadingMore: false,
+  };
+
+  showShort(state, feed, initialVideoId);
+  fillShortsQueue(state, initialVideoId);
+  wireShortsSwipeNavigation(state, feed);
+}
+
+function fillShortsQueue(state, basedOnVideoId) {
+  if (state.loadingMore || state.queue.length >= SHORTS_QUEUE_REFILL_THRESHOLD) return;
+  state.loadingMore = true;
+  fetchJSON(`/proxy/related/${encodeURIComponent(basedOnVideoId)}?limit=20`).then(data => {
+    const entries = data.entries || [];
+    for (const e of entries) {
+      if (e.is_short && e.video_id && !state.seen.has(e.video_id)) {
+        state.queue.push(e.video_id);
+        state.seen.add(e.video_id);
+      }
+    }
+    state.loadingMore = false;
+    prefetchShorts(state, SHORTS_PREFETCH_COUNT);
+  }).catch(() => {
+    state.loadingMore = false;
+  });
+}
+
+function prefetchShorts(state, count) {
+  const targets = state.queue.slice(0, count);
+  for (const videoId of targets) {
+    if (!state.cache.has(videoId)) {
+      state.cache.set(videoId, fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`).catch(() => null));
+    }
+  }
+}
+
+function showShort(state, feed, videoId) {
+  state.currentVideoId = videoId;
+  let streamPromise = state.cache.get(videoId);
+  if (!streamPromise) {
+    streamPromise = fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`).catch(() => null);
+    state.cache.set(videoId, streamPromise);
+  }
+
+  const isAlreadyCached = state.cache.has(videoId);
+  if (!isAlreadyCached) {
+    feed.innerHTML = `<div class="shorts-video-wrap"><div class="sk" style="width:100%;height:100%;"></div></div>`;
+  }
+
+  streamPromise.then(data => {
+    if (state.currentVideoId !== videoId) return; // 既に別のショートへ移動済みなら描画しない
+    if (!data) {
+      feed.innerHTML = `<div class="shorts-video-wrap shorts-error">読み込めませんでした</div>`;
+      return;
+    }
+    renderShortItem(feed, data, videoId);
+  });
+}
+
+function renderShortItem(feed, stream, videoId) {
+  const streams = stream.streams || [];
+  const combined = streams.filter(s => s.url && s.vcodec && s.vcodec !== "none" && s.acodec && s.acodec !== "none");
+  const best = combined[0] || null;
+
+  const channelId = stream.channel_id || "";
+  const channelName = stream.channel || stream.uploader || "";
+  const channelThumb = stream.channel_avatar_base64 || stream.channel_avatar || "";
+  const subscribed = channelId ? isSubscribed(channelId) : false;
+  const liked = isLiked(videoId);
+  const likeCount = stream.like_count ? formatViews(stream.like_count) : "";
+  const commentCount = stream.comment_count ? formatViews(stream.comment_count) : "";
+
+  feed.innerHTML = `
+    <div class="shorts-video-wrap">
+      ${best ? `<video class="shorts-video" src="${escapeHtml(best.url)}" autoplay loop playsinline webkit-playsinline></video>` : `<div class="shorts-error">再生できるフォーマットがありません</div>`}
+
+      <div class="shorts-overlay-bottom">
+        <div class="shorts-channel-row">
+          <div class="avatar shorts-avatar">${channelThumb ? `<img src="${escapeHtml(channelThumb)}" alt="">` : escapeHtml((channelName || "?")[0] || "?")}</div>
+          <span class="shorts-channel-name">${escapeHtml(channelName)}</span>
+          ${channelId ? `<button type="button" class="subscribe-btn shorts-subscribe-btn ${subscribed ? "subscribed" : ""}" data-action="toggle-subscribe" data-channel-id="${escapeHtml(channelId)}" data-channel-name="${escapeHtml(channelName)}" data-channel-thumb="${escapeHtml(channelThumb)}">${subscribed ? "登録済み" : "チャンネル登録"}</button>` : ""}
+        </div>
+        <div class="shorts-title-text">${escapeHtml(stream.title || "")}</div>
+      </div>
+
+      <div class="shorts-actions">
+        <button type="button" class="shorts-action-btn ${liked ? "active" : ""}" data-action="toggle-like" data-video-id="${escapeHtml(videoId)}" data-title="${escapeHtml(stream.title || "")}" data-thumbnail="${escapeHtml(stream.thumbnail || "")}" data-channel="${escapeHtml(channelName)}" data-duration="${stream.duration || ""}">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="${liked ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></span>
+          <span class="shorts-action-count">${escapeHtml(likeCount)}</span>
+        </button>
+        <button type="button" class="shorts-action-btn" id="shortsCommentBtn">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H7l-3 3z"/></svg></span>
+          <span class="shorts-action-count">${escapeHtml(commentCount)}</span>
+        </button>
+        <button type="button" class="shorts-action-btn" id="shortsShareBtn">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></span>
+          <span class="shorts-action-count">共有</span>
+        </button>
+      </div>
+    </div>`;
+
+  const videoEl = feed.querySelector(".shorts-video");
+  if (videoEl) {
+    videoEl.addEventListener("click", () => {
+      if (videoEl.paused) videoEl.play().catch(() => {});
+      else videoEl.pause();
+    });
+  }
+
+  const shareBtn = feed.querySelector("#shortsShareBtn");
+  if (shareBtn) {
+    shareBtn.addEventListener("click", () => {
+      const url = `${window.location.origin}/shorts/${encodeURIComponent(videoId)}`;
+      if (navigator.share) {
+        navigator.share({ title: stream.title || "", url }).catch(() => {});
+      } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).catch(() => {});
+      }
+    });
+  }
+
+  const commentBtn = feed.querySelector("#shortsCommentBtn");
+  if (commentBtn) {
+    commentBtn.addEventListener("click", () => {
+      window.location.href = `/watch?v=${encodeURIComponent(videoId)}`;
+    });
+  }
+
+  // ブラウザのURL(履歴)もこっそり更新しておく(共有・再読み込み時に同じ動画に戻れるように)
+  const newUrl = `/shorts/${encodeURIComponent(videoId)}`;
+  if (window.location.pathname !== newUrl) {
+    window.history.replaceState(null, "", newUrl);
+  }
+}
+
+function goToNextShort(state, feed) {
+  if (!state.queue.length) {
+    fillShortsQueue(state, state.currentVideoId);
+    return;
+  }
+  const nextId = state.queue.shift();
+  showShort(state, feed, nextId);
+  prefetchShorts(state, SHORTS_PREFETCH_COUNT);
+  if (state.queue.length < SHORTS_QUEUE_REFILL_THRESHOLD) {
+    fillShortsQueue(state, nextId);
+  }
+}
+
+function wireShortsSwipeNavigation(state, feed) {
+  let touchStartY = null;
+  let wheelLocked = false;
+
+  feed.addEventListener("touchstart", (e) => {
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  feed.addEventListener("touchend", (e) => {
+    if (touchStartY === null) return;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    touchStartY = null;
+    if (dy < -50) goToNextShort(state, feed); // 上向きスワイプ = 次のショートへ
+  }, { passive: true });
+
+  feed.addEventListener("wheel", (e) => {
+    if (wheelLocked || e.deltaY <= 30) return;
+    wheelLocked = true;
+    goToNextShort(state, feed);
+    setTimeout(() => { wheelLocked = false; }, 400);
+  }, { passive: true });
+}
+
 async function initWatchPage(videoId) {
   const infoBox = document.getElementById("videoInfo");
   const relatedBox = document.getElementById("relatedList");
@@ -826,7 +1016,17 @@ function renderPlayer(wrap, stream, info) {
   const listParam = urlParams.get("list") || "";
   const indexParam = parseInt(urlParams.get("index") || "0", 10);
   const playlistContext = listParam.startsWith("my:") ? { playlistId: listParam.slice(3), index: indexParam } : null;
-  const streams = stream.streams || [];
+  const streams = (stream.streams || []).map(s => {
+    // バックエンドが自動生成する「合成ストリーム」(format_idが"muxed-"で始まる)は、
+    // urlがバックエンド専用の相対パス(/api/muxed-stream/...)になっているため、
+    // フロントエンド自身の中継エンドポイント(/media-muxed/...)を指すよう書き換える。
+    if (s.url && s.format_id && s.format_id.startsWith("muxed-") && s.url.startsWith("/api/muxed-stream/")) {
+      const qIndex = s.url.indexOf("?");
+      const query = qIndex >= 0 ? s.url.slice(qIndex) : "";
+      return { ...s, url: `/media-muxed/${encodeURIComponent(videoId)}${query}` };
+    }
+    return s;
+  });
   const combined = streams.filter(s => s.url && s.vcodec && s.vcodec !== "none" && s.acodec && s.acodec !== "none");
   const videoOnly = streams.filter(s => s.url && s.vcodec && s.vcodec !== "none" && (!s.acodec || s.acodec === "none"));
   const audioOnly = streams.filter(s => s.url && (!s.vcodec || s.vcodec === "none") && s.acodec && s.acodec !== "none");
@@ -2813,7 +3013,7 @@ document.addEventListener("DOMContentLoaded", () => {
   checkForAnnouncement();
   const ds = document.body.dataset;
   const page = ds.page;
-  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage(); else if (page === "account") initAccountPage(); else if (page === "inquiries") initInquiriesPage(); else if (page === "inquiry_detail") initInquiryDetailPage(ds.inquiryId); else if (page === "my_playlists") initMyPlaylistsPage(); else if (page === "my_playlist_detail") initMyPlaylistDetailPage(ds.playlistId); else if (page === "admin_moderation") initAdminModerationPage();
+  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "shorts") initShortsPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage(); else if (page === "account") initAccountPage(); else if (page === "inquiries") initInquiriesPage(); else if (page === "inquiry_detail") initInquiryDetailPage(ds.inquiryId); else if (page === "my_playlists") initMyPlaylistsPage(); else if (page === "my_playlist_detail") initMyPlaylistDetailPage(ds.playlistId); else if (page === "admin_moderation") initAdminModerationPage();
 });
 
 if ("serviceWorker" in navigator) {
