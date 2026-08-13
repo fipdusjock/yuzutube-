@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "FpmEWQxtgG50Gl69a7xg7vexzxjHyuEgDp2PtVAf8UhJeimO")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -785,8 +785,8 @@ def proxy_comments(video_id):
 
 @app.route("/proxy/livechat/<video_id>")
 def proxy_livechat(video_id):
-    limit = request.args.get("limit", "200")
-    return _proxy(f"/api/livechat/{video_id}", limit=limit)
+    after = request.args.get("after", "0")
+    return _proxy(f"/api/livechat/{video_id}", after=after)
 
 
 @app.route("/proxy/subtitles/<video_id>")
