@@ -43,7 +43,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "UxlOJSBLw4gpmbzM2TIN9HyMHM3icj4Hwl8fT45AGNlvkp0V")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -239,6 +239,31 @@ def watch():
     if len(video_id) != 11 and video_id.startswith(_PLAYLIST_ID_PREFIXES):
         return redirect(url_for("playlist", list=video_id))
     return render_template("watch.html", video_id=video_id)
+
+
+@app.route("/shorts/")
+@app.route("/shorts")
+def shorts_entry():
+    """
+    動画IDを指定せずに「ショート」を開いた場合(サイドバーのショート項目等)。
+    検索結果から、ちょうどよさそうなショート動画を1本選んでそこから再生を
+    始める(YouTube本家のように「おすすめ順」を再現するのは難しいため、
+    現実的な代替として「shorts」で検索した結果を使っている)。
+    """
+    api_base = _resolve_api_base()
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
+    try:
+        resp = requests.get(f"{api_base}/api/search", params={"q": "shorts", "limit": 20}, headers=headers, timeout=PROXY_TIMEOUT)
+        entries = resp.json().get("entries", []) if resp.status_code < 400 else []
+    except (requests.RequestException, ValueError):
+        entries = []
+
+    for e in entries:
+        if e.get("is_short") and e.get("video_id"):
+            return redirect(f"/shorts/{e['video_id']}")
+
+    # ショートが1本も見つからなかった場合は、ひとまずホームに戻す
+    return redirect("/")
 
 
 @app.route("/shorts/<video_id>")
