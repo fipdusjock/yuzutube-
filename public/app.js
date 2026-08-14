@@ -336,8 +336,22 @@ function formatUpcomingLabel(releaseTimestamp) {
   return `${diffDay}日後に配信`;
 }
 
+function channelCardHTML(e) {
+  const avatarHTML = e.channel_thumbnail ? `<img src="${escapeHtml(e.channel_thumbnail)}" alt="" loading="lazy">` : escapeHtml((e.title || "?")[0] || "?");
+  const subInfo = [e.subscriber_count_text, e.video_count_text].filter(Boolean).join(" &middot; ");
+  return `\n    <a class="card channel-card" href="/channel/${encodeURIComponent(e.channel_id)}">\n      <div class="channel-card-avatar">${avatarHTML}</div>\n      <div class="meta" style="flex-direction:column; align-items:center; text-align:center;">\n        <div class="title">${escapeHtml(e.title)}</div>\n        <div class="sub">${subInfo ? escapeHtml(subInfo) : "チャンネル"}</div>\n      </div>\n    </a>`;
+}
+
 function videoCardHTML(e, watchHref, options) {
   if (e.entry_type === "playlist") return playlistCardHTML(e);
+  if (e.entry_type === "channel") return channelCardHTML(e);
+  // ショート動画は専用の縦スクロール視聴ページ(/shorts/)へ誘導する。
+  // 呼び出し側は毎回 /watch?v=... を渡しているだけなので、ここで一括して
+  // 差し替えることで、検索結果・関連動画・チャンネルページ等どこであっても
+  // 一貫してショートは/shorts/へ飛ぶようにしている。
+  if (e.is_short && e.video_id) {
+    watchHref = `/shorts/${encodeURIComponent(e.video_id)}`;
+  }
   const vertical = options && options.vertical;
   const isLive = e.live_status === "is_live";
   const isUpcoming = e.live_status === "is_upcoming";

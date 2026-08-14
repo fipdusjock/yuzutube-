@@ -489,6 +489,31 @@ main.content {
   width: 30%;
   background: rgba(0,0,0,0.55);
 }
+
+.channel-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 12px;
+  text-align: center;
+}
+.channel-card-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.channel-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.channel-card .title { text-align: center; }
+.channel-card .sub { text-align: center; }
 .playlist-badge {
   position: absolute;
   right: 8px;
