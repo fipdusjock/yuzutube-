@@ -111,6 +111,61 @@ const LIKES_MIGRATION_FLAG_KEY = "tubely_likes_migrated_v2";
 
 const HISTORY_KEY = "tubely_history";
 
+// --- 再生位置の保存(「途中まで見た動画をもう一度開くと、続きから再生」) --------
+const WATCH_PROGRESS_KEY_PREFIX = "tubely_progress:";
+const WATCH_PROGRESS_MIN_SECONDS = 10;       // これ未満はそもそも保存しない(開いてすぐ離脱しただけ)
+const WATCH_PROGRESS_END_MARGIN_SECONDS = 15; // 動画の終わり付近(残りこの秒数未満)は「見終わった」とみなす
+const WATCH_PROGRESS_MAX_ENTRIES = 200;       // 保存しすぎてlocalStorageを圧迫しないための上限
+
+function saveWatchProgress(videoId, currentTime, duration) {
+  try {
+    const key = WATCH_PROGRESS_KEY_PREFIX + videoId;
+    if (!currentTime || currentTime < WATCH_PROGRESS_MIN_SECONDS) {
+      localStorage.removeItem(key);
+      return;
+    }
+    if (duration && currentTime > duration - WATCH_PROGRESS_END_MARGIN_SECONDS) {
+      // 最後まで見終わった(とみなせる)ので、次に開いた時は最初から再生できるよう消しておく
+      localStorage.removeItem(key);
+      return;
+    }
+    localStorage.setItem(key, JSON.stringify({ time: currentTime, updated_at: Date.now() }));
+    pruneWatchProgressEntries();
+  } catch (e) { /* localStorageが使えない環境では何もしない */ }
+}
+
+function getWatchProgress(videoId) {
+  try {
+    const raw = localStorage.getItem(WATCH_PROGRESS_KEY_PREFIX + videoId);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return typeof data.time === "number" && data.time > 0 ? data.time : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function pruneWatchProgressEntries() {
+  // 保存件数が増えすぎたら、古いものから間引く(無制限に溜め続けるとlocalStorageの
+  // 容量上限に達してエラーになることがあるため)。
+  try {
+    const entries = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(WATCH_PROGRESS_KEY_PREFIX)) {
+        try {
+          const data = JSON.parse(localStorage.getItem(key));
+          entries.push({ key, updated_at: data.updated_at || 0 });
+        } catch (e) { /* 壊れたエントリは無視 */ }
+      }
+    }
+    if (entries.length <= WATCH_PROGRESS_MAX_ENTRIES) return;
+    entries.sort((a, b) => a.updated_at - b.updated_at);
+    const toRemove = entries.slice(0, entries.length - WATCH_PROGRESS_MAX_ENTRIES);
+    toRemove.forEach(e => localStorage.removeItem(e.key));
+  } catch (e) { /* noop */ }
+}
+
 function syncAccountDataOnLoad() {
   // ログイン中なら、サーバー側の登録チャンネル・いいねをローカルへ反映しておく。
   // これをしないと、別端末で登録/いいねした内容が、このボタンの状態(色が付くかどうか)に
@@ -345,13 +400,6 @@ function channelCardHTML(e) {
 function videoCardHTML(e, watchHref, options) {
   if (e.entry_type === "playlist") return playlistCardHTML(e);
   if (e.entry_type === "channel") return channelCardHTML(e);
-  // ショート動画は専用の縦スクロール視聴ページ(/shorts/)へ誘導する。
-  // 呼び出し側は毎回 /watch?v=... を渡しているだけなので、ここで一括して
-  // 差し替えることで、検索結果・関連動画・チャンネルページ等どこであっても
-  // 一貫してショートは/shorts/へ飛ぶようにしている。
-  if (e.is_short && e.video_id) {
-    watchHref = `/shorts/${encodeURIComponent(e.video_id)}`;
-  }
   const vertical = options && options.vertical;
   const isLive = e.live_status === "is_live";
   const isUpcoming = e.live_status === "is_upcoming";
@@ -477,196 +525,6 @@ async function initResultsPage(query) {
   }
 
   await load();
-}
-
-// --- ショート(縦スクロール視聴) ------------------------------------------
-//
-// 「次々スクロールしても取得が追いつかない」問題への対策として、常に
-// 今見ているショートの裏で、次の2本分を先読み(プリフェッチ)しておく方式。
-// スクロールしてきた時には既に取得が終わっているので、すぐ切り替えられる。
-// (実機検証の結果、フォーマットを1つに絞っても抽出自体は速くならないことが
-// 分かったため、通常の/api/streamをそのまま使い、先読みだけで体感速度を稼ぐ)
-
-const SHORTS_PREFETCH_COUNT = 2;
-const SHORTS_QUEUE_REFILL_THRESHOLD = 3;
-
-function initShortsPage(initialVideoId) {
-  const feed = document.getElementById("shortsFeed");
-  if (!feed || !initialVideoId) return;
-
-  const state = {
-    queue: [],
-    seen: new Set([initialVideoId]),
-    cache: new Map(),
-    currentVideoId: initialVideoId,
-    loadingMore: false,
-  };
-
-  showShort(state, feed, initialVideoId);
-  fillShortsQueue(state, initialVideoId);
-  wireShortsSwipeNavigation(state, feed);
-}
-
-function fillShortsQueue(state, basedOnVideoId) {
-  if (state.loadingMore || state.queue.length >= SHORTS_QUEUE_REFILL_THRESHOLD) return;
-  state.loadingMore = true;
-  fetchJSON(`/proxy/related/${encodeURIComponent(basedOnVideoId)}?limit=20`).then(data => {
-    const entries = data.entries || [];
-    for (const e of entries) {
-      if (e.is_short && e.video_id && !state.seen.has(e.video_id)) {
-        state.queue.push(e.video_id);
-        state.seen.add(e.video_id);
-      }
-    }
-    state.loadingMore = false;
-    prefetchShorts(state, SHORTS_PREFETCH_COUNT);
-  }).catch(() => {
-    state.loadingMore = false;
-  });
-}
-
-function prefetchShorts(state, count) {
-  const targets = state.queue.slice(0, count);
-  for (const videoId of targets) {
-    if (!state.cache.has(videoId)) {
-      state.cache.set(videoId, fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`).catch(() => null));
-    }
-  }
-}
-
-function showShort(state, feed, videoId) {
-  state.currentVideoId = videoId;
-  let streamPromise = state.cache.get(videoId);
-  if (!streamPromise) {
-    streamPromise = fetchJSON(`/proxy/stream/${encodeURIComponent(videoId)}`).catch(() => null);
-    state.cache.set(videoId, streamPromise);
-  }
-
-  const isAlreadyCached = state.cache.has(videoId);
-  if (!isAlreadyCached) {
-    feed.innerHTML = `<div class="shorts-video-wrap"><div class="sk" style="width:100%;height:100%;"></div></div>`;
-  }
-
-  streamPromise.then(data => {
-    if (state.currentVideoId !== videoId) return; // 既に別のショートへ移動済みなら描画しない
-    if (!data) {
-      feed.innerHTML = `<div class="shorts-video-wrap shorts-error">読み込めませんでした</div>`;
-      return;
-    }
-    renderShortItem(feed, data, videoId);
-  });
-}
-
-function renderShortItem(feed, stream, videoId) {
-  const streams = stream.streams || [];
-  const combined = streams.filter(s => s.url && s.vcodec && s.vcodec !== "none" && s.acodec && s.acodec !== "none");
-  const best = combined[0] || null;
-
-  const channelId = stream.channel_id || "";
-  const channelName = stream.channel || stream.uploader || "";
-  const channelThumb = stream.channel_avatar_base64 || stream.channel_avatar || "";
-  const subscribed = channelId ? isSubscribed(channelId) : false;
-  const liked = isLiked(videoId);
-  const likeCount = stream.like_count ? formatViews(stream.like_count) : "";
-  const commentCount = stream.comment_count ? formatViews(stream.comment_count) : "";
-
-  feed.innerHTML = `
-    <div class="shorts-video-wrap">
-      ${best ? `<video class="shorts-video" src="${escapeHtml(best.url)}" autoplay loop playsinline webkit-playsinline></video>` : `<div class="shorts-error">再生できるフォーマットがありません</div>`}
-
-      <div class="shorts-overlay-bottom">
-        <div class="shorts-channel-row">
-          <div class="avatar shorts-avatar">${channelThumb ? `<img src="${escapeHtml(channelThumb)}" alt="">` : escapeHtml((channelName || "?")[0] || "?")}</div>
-          <span class="shorts-channel-name">${escapeHtml(channelName)}</span>
-          ${channelId ? `<button type="button" class="subscribe-btn shorts-subscribe-btn ${subscribed ? "subscribed" : ""}" data-action="toggle-subscribe" data-channel-id="${escapeHtml(channelId)}" data-channel-name="${escapeHtml(channelName)}" data-channel-thumb="${escapeHtml(channelThumb)}">${subscribed ? "登録済み" : "チャンネル登録"}</button>` : ""}
-        </div>
-        <div class="shorts-title-text">${escapeHtml(stream.title || "")}</div>
-      </div>
-
-      <div class="shorts-actions">
-        <button type="button" class="shorts-action-btn ${liked ? "active" : ""}" data-action="toggle-like" data-video-id="${escapeHtml(videoId)}" data-title="${escapeHtml(stream.title || "")}" data-thumbnail="${escapeHtml(stream.thumbnail || "")}" data-channel="${escapeHtml(channelName)}" data-duration="${stream.duration || ""}">
-          <span class="icon"><svg viewBox="0 0 24 24" fill="${liked ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></span>
-          <span class="shorts-action-count">${escapeHtml(likeCount)}</span>
-        </button>
-        <button type="button" class="shorts-action-btn" id="shortsCommentBtn">
-          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H7l-3 3z"/></svg></span>
-          <span class="shorts-action-count">${escapeHtml(commentCount)}</span>
-        </button>
-        <button type="button" class="shorts-action-btn" id="shortsShareBtn">
-          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></span>
-          <span class="shorts-action-count">共有</span>
-        </button>
-      </div>
-    </div>`;
-
-  const videoEl = feed.querySelector(".shorts-video");
-  if (videoEl) {
-    videoEl.addEventListener("click", () => {
-      if (videoEl.paused) videoEl.play().catch(() => {});
-      else videoEl.pause();
-    });
-  }
-
-  const shareBtn = feed.querySelector("#shortsShareBtn");
-  if (shareBtn) {
-    shareBtn.addEventListener("click", () => {
-      const url = `${window.location.origin}/shorts/${encodeURIComponent(videoId)}`;
-      if (navigator.share) {
-        navigator.share({ title: stream.title || "", url }).catch(() => {});
-      } else if (navigator.clipboard) {
-        navigator.clipboard.writeText(url).catch(() => {});
-      }
-    });
-  }
-
-  const commentBtn = feed.querySelector("#shortsCommentBtn");
-  if (commentBtn) {
-    commentBtn.addEventListener("click", () => {
-      window.location.href = `/watch?v=${encodeURIComponent(videoId)}`;
-    });
-  }
-
-  // ブラウザのURL(履歴)もこっそり更新しておく(共有・再読み込み時に同じ動画に戻れるように)
-  const newUrl = `/shorts/${encodeURIComponent(videoId)}`;
-  if (window.location.pathname !== newUrl) {
-    window.history.replaceState(null, "", newUrl);
-  }
-}
-
-function goToNextShort(state, feed) {
-  if (!state.queue.length) {
-    fillShortsQueue(state, state.currentVideoId);
-    return;
-  }
-  const nextId = state.queue.shift();
-  showShort(state, feed, nextId);
-  prefetchShorts(state, SHORTS_PREFETCH_COUNT);
-  if (state.queue.length < SHORTS_QUEUE_REFILL_THRESHOLD) {
-    fillShortsQueue(state, nextId);
-  }
-}
-
-function wireShortsSwipeNavigation(state, feed) {
-  let touchStartY = null;
-  let wheelLocked = false;
-
-  feed.addEventListener("touchstart", (e) => {
-    touchStartY = e.touches[0].clientY;
-  }, { passive: true });
-
-  feed.addEventListener("touchend", (e) => {
-    if (touchStartY === null) return;
-    const dy = e.changedTouches[0].clientY - touchStartY;
-    touchStartY = null;
-    if (dy < -50) goToNextShort(state, feed); // 上向きスワイプ = 次のショートへ
-  }, { passive: true });
-
-  feed.addEventListener("wheel", (e) => {
-    if (wheelLocked || e.deltaY <= 30) return;
-    wheelLocked = true;
-    goToNextShort(state, feed);
-    setTimeout(() => { wheelLocked = false; }, 400);
-  }, { passive: true });
 }
 
 async function initWatchPage(videoId) {
@@ -1211,13 +1069,18 @@ function renderPlayer(wrap, stream, info) {
   function loadSource(quality, resumePlayback) {
     stopAudioSync();
     const wasPlaying = resumePlayback && !videoEl.paused;
-    const resumeTime = resumePlayback ? videoEl.currentTime : 0;
+    // resumePlayback=true(画質切り替え時)は「今見ていた位置」を保つ。
+    // resumePlayback=false(最初の読み込み時)は、ライブ配信でなければ
+    // 「前回このページを開いた時に保存しておいた再生位置」があればそこから始める
+    // (無ければ0=最初からのまま)。
+    const savedProgress = (!resumePlayback && !isLive) ? getWatchProgress(videoId) : null;
+    const resumeTime = resumePlayback ? videoEl.currentTime : (savedProgress || 0);
     attachWithFallback(videoEl, quality.url, quality.format_id);
     if (quality.needsAudioSync && bestAudio) {
       startAudioSync(bestAudio);
     }
     const onMeta = () => {
-      if (resumePlayback) videoEl.currentTime = resumeTime;
+      if (resumePlayback || savedProgress) videoEl.currentTime = resumeTime;
       if (wasPlaying) {
         videoEl.play().catch(() => {});
         if (syncState.audioEl) syncState.audioEl.play().catch(() => {});
@@ -1585,6 +1448,20 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContex
   videoEl.addEventListener("pause", () => {
     playBtn.innerHTML = icon("play");
   });
+  videoEl.addEventListener("pause", () => {
+    if (!isLive) saveWatchProgress(currentVideoId, videoEl.currentTime, videoEl.duration);
+  });
+  videoEl.addEventListener("ended", () => {
+    // 最後まで見終わったので、次に開いた時は最初から再生できるよう進捗を消す
+    // (saveWatchProgressは「終盤に達したら自動削除」する仕様だが、
+    // 念のためここでも明示的に呼んでおく)。
+    if (!isLive) saveWatchProgress(currentVideoId, 0, 0);
+  });
+  window.addEventListener("pagehide", () => {
+    if (!isLive) saveWatchProgress(currentVideoId, videoEl.currentTime, videoEl.duration);
+  });
+
+  let lastProgressSaveAt = 0;
   videoEl.addEventListener("timeupdate", () => {
     curTimeEl.textContent = formatPlayerTime(videoEl.currentTime);
     if (isLive) {
@@ -1602,6 +1479,14 @@ function wireCustomPlayerControls(videoEl, playerRoot, syncState, playlistContex
       const pct = videoEl.currentTime / videoEl.duration * 100;
       seekBar.value = pct;
       updateSeekBarFill(pct);
+    }
+    // 「途中まで見た動画をもう一度開くと続きから再生」のための進捗保存。
+    // timeupdateは数百msおきに発火するので、毎回保存すると無駄が多いため
+    // 5秒に1回程度に間引いている。
+    const now = Date.now();
+    if (now - lastProgressSaveAt > 5000) {
+      lastProgressSaveAt = now;
+      saveWatchProgress(currentVideoId, videoEl.currentTime, videoEl.duration);
     }
   });
   videoEl.addEventListener("loadedmetadata", () => {
@@ -1772,10 +1657,17 @@ async function initChannelPage(channelId) {
     if (!hasMore) return;
     try {
       const data = await fetchJSON(`/proxy/channel/${encodeURIComponent(channelId)}?tab=${encodeURIComponent(currentTab)}&limit=${PAGE_SIZE}&offset=${offset}`);
-      const entries = data.entries || [];
+      let entries = data.entries || [];
       hasMore = entries.length >= PAGE_SIZE;
       offset += entries.length;
       const isShorts = currentTab === "shorts";
+      if (isShorts) {
+        // ショートタブから返ってきた動画は、durationが正しく取れていないことが
+        // あり(yt-dlpのflat抽出の制約)、その場合は長さベースのis_short判定が
+        // 効かない。/shortsタブ自体から来ている時点でショートであることは
+        // 確定しているので、ここで無条件で上書きする。
+        entries = entries.map(e => ({ ...e, is_short: true }));
+      }
       const html = entries.map(e => videoCardHTML(e, `/watch?v=${encodeURIComponent(e.video_id)}`, { vertical: isShorts })).join("");
       if (reset) {
         grid.innerHTML = entries.length ? html : '<div class="empty-state">見つかりませんでした。</div>';
@@ -3027,7 +2919,7 @@ document.addEventListener("DOMContentLoaded", () => {
   checkForAnnouncement();
   const ds = document.body.dataset;
   const page = ds.page;
-  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "shorts") initShortsPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage(); else if (page === "account") initAccountPage(); else if (page === "inquiries") initInquiriesPage(); else if (page === "inquiry_detail") initInquiryDetailPage(ds.inquiryId); else if (page === "my_playlists") initMyPlaylistsPage(); else if (page === "my_playlist_detail") initMyPlaylistDetailPage(ds.playlistId); else if (page === "admin_moderation") initAdminModerationPage();
+  if (page === "index") initIndexPage(); else if (page === "results") initResultsPage(ds.query || ""); else if (page === "watch") initWatchPage(ds.videoId); else if (page === "channel") initChannelPage(ds.channelId); else if (page === "playlist") initPlaylistPage(ds.playlistId); else if (page === "subscriptions") initSubscriptionsPage(); else if (page === "liked") initLikedPage(); else if (page === "history") initHistoryPage(); else if (page === "settings") initSettingsPage(); else if (page === "account") initAccountPage(); else if (page === "inquiries") initInquiriesPage(); else if (page === "inquiry_detail") initInquiryDetailPage(ds.inquiryId); else if (page === "my_playlists") initMyPlaylistsPage(); else if (page === "my_playlist_detail") initMyPlaylistDetailPage(ds.playlistId); else if (page === "admin_moderation") initAdminModerationPage();
 });
 
 if ("serviceWorker" in navigator) {
