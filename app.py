@@ -13,6 +13,7 @@ ytdlp_frontend - ytdlp_apiを叩いて、YouTubeに寄せた見た目で
 import os
 import json
 import re
+import random
 
 import requests
 from flask import Flask, render_template, request, redirect, url_for, abort, send_from_directory, jsonify, Response, make_response
@@ -43,7 +44,7 @@ _URL_RE = re.compile(r"^https://[^\s]+$")
 # そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
 # 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
 # コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "UxlOJSBLw4gpmbzM2TIN9HyMHM3icj4Hwl8fT45AGNlvkp0V")
+FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "")
 
 
 def _backend_auth_headers():
@@ -245,35 +246,20 @@ def watch():
 @app.route("/shorts")
 def shorts_entry():
     """
-    動画IDを指定せずに「ショート」を開いた場合(サイドバーのショート項目等)。
-    検索結果から、ちょうどよさそうなショート動画を1本選んでそこから再生を
-    始める(YouTube本家のように「おすすめ順」を再現するのは難しいため、
-    現実的な代替として「shorts」で検索した結果を使っている)。
+    ショート専用の縦スクロール視聴ページは撤廃した。動画ID無しでアクセスされた
+    場合は、ひとまずホームに戻す(古いブックマーク・リンク対策)。
     """
-    api_base = _resolve_api_base()
-    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
-    try:
-        resp = requests.get(f"{api_base}/api/search", params={"q": "shorts", "limit": 20}, headers=headers, timeout=PROXY_TIMEOUT)
-        entries = resp.json().get("entries", []) if resp.status_code < 400 else []
-    except (requests.RequestException, ValueError):
-        entries = []
-
-    for e in entries:
-        if e.get("is_short") and e.get("video_id"):
-            return redirect(f"/shorts/{e['video_id']}")
-
-    # ショートが1本も見つからなかった場合は、ひとまずホームに戻す
     return redirect("/")
 
 
 @app.route("/shorts/<video_id>")
 def shorts(video_id):
     """
-    縦スクロールでショートを次々見ていく専用ページ。
-    最初の1本目はサーバー側でも動画IDを埋め込んでおくが、以降のスクロールは
-    全部JS側(app.js)で完結する(次のショート一覧を取得→先読み→切り替え)。
+    ショート専用の縦スクロール視聴ページは撤廃し、通常のwatchページに一本化した。
+    ショート動画も含めてすべて/watchで再生する。/shorts/{video_id}への古いリンクは
+    そのまま/watch?v={video_id}に転送する(共有済みリンクが壊れないように)。
     """
-    return render_template("shorts.html", video_id=video_id)
+    return redirect(f"/watch?v={video_id}")
 
 
 @app.route("/channel/<channel_id>")
