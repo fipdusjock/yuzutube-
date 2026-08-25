@@ -3,7 +3,7 @@
     "date": "2026-08-25",
     "changes": [
       "トークン発行apiを叩いてやるように修正 by Yosshy",
-      "railwayでのデプロイに対応 by Yosshy",
+      "railwayでのデプロイに対応 by Yosshy"
     ]
   },
   {
