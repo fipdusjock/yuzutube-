@@ -14,6 +14,8 @@ import os
 import json
 import re
 import random
+import threading
+import time
 
 import requests
 from flask import Flask, render_template, request, redirect, url_for, abort, send_from_directory, jsonify, Response, make_response
@@ -39,16 +41,62 @@ _BACKEND_REQUEST_HEADERS = {
 
 _URL_RE = re.compile(r"^https://[^\s]+$")
 
-# ytdlp_api側は /api/* 全体にトークン必須の門番を置くようになったが、
-# ytdlp_frontendだけは専用の合言葉(バックエンドと同じ値)を送ることで
-# そのチェックを素通りできる。バックエンド側の YTDLP_API_FRONTEND_SECRET と
-# 同じ値をここに設定すること(バックエンドが自動生成した値を frontend_secret.txt から
-# コピーしてくるのが手っ取り早い)。
-FRONTEND_BYPASS_SECRET = os.environ.get("YTDLP_API_FRONTEND_SECRET", "UxlOJSBLw4gpmbzM2TIN9HyMHM3icj4Hwl8fT45AGNlvkp0V")
+# ytdlp_api側の /api/token/issue から取得する短命トークン。X-API-Token ヘッダーで
+# 全リクエストに付与する。以前使っていた固定の合言葉(X-Frontend-Secret)は
+# バックエンド側がこのトークン認証に一本化されたため廃止した。
+# レスポンス形式: {"token": "...", "issued_at": <epoch秒>, "expires_at": <epoch秒>}
+TOKEN_ISSUE_PATH = "/api/token/issue"
+TOKEN_REFRESH_MARGIN_SECONDS = 30  # 期限ちょうどでの失効を避けるため、この秒数前倒しで取り直す
+TOKEN_FETCH_TIMEOUT = 10
+
+_token_lock = threading.Lock()
+_token_cache = {}  # api_base -> {"token": str, "expires_at": float}
 
 
-def _backend_auth_headers():
-    return {"X-Frontend-Secret": FRONTEND_BYPASS_SECRET} if FRONTEND_BYPASS_SECRET else {}
+def _fetch_api_token(api_base):
+    resp = requests.get(
+        f"{api_base}{TOKEN_ISSUE_PATH}",
+        headers=_BACKEND_REQUEST_HEADERS,
+        timeout=TOKEN_FETCH_TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    token = data.get("token", "")
+    expires_at = data.get("expires_at", 0)
+    if not token:
+        raise ValueError("token/issue のレスポンスに token が含まれていません")
+    return token, expires_at
+
+
+def _get_api_token(api_base):
+    """api_baseごとにトークンをメモリキャッシュし、期限切れ間近なら取り直す。
+    取得に失敗した場合は None を返す(呼び出し側はヘッダーを付けずに続行する)。"""
+    now = time.time()
+    cached = _token_cache.get(api_base)
+    if cached and cached["expires_at"] - TOKEN_REFRESH_MARGIN_SECONDS > now:
+        return cached["token"]
+
+    with _token_lock:
+        # ロック待ちの間に他スレッドが更新している可能性があるので再チェック
+        cached = _token_cache.get(api_base)
+        now = time.time()
+        if cached and cached["expires_at"] - TOKEN_REFRESH_MARGIN_SECONDS > now:
+            return cached["token"]
+        try:
+            token, expires_at = _fetch_api_token(api_base)
+        except (requests.RequestException, ValueError) as e:
+            app.logger.error("token/issue 取得失敗: %s -> %s", api_base, e)
+            return cached["token"] if cached else None
+        _token_cache[api_base] = {"token": token, "expires_at": expires_at}
+        return token
+
+
+def _backend_auth_headers(api_base):
+    headers = {}
+    api_token = _get_api_token(api_base)
+    if api_token:
+        headers["X-API-Token"] = api_token
+    return headers
 
 
 @app.context_processor
@@ -78,7 +126,7 @@ def do_login():
         resp = requests.post(
             f"{api_base}/api/auth/login",
             json={"email": body.get("email", ""), "password": body.get("password", ""), "ip": _client_ip()},
-            headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()},
+            headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base)},
             timeout=PROXY_TIMEOUT,
         )
     except requests.RequestException as e:
@@ -115,7 +163,7 @@ def do_signup():
                 "agreed_to_terms": body.get("agreed_to_terms", False),
                 "ip": _client_ip(),
             },
-            headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()},
+            headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base)},
             timeout=PROXY_TIMEOUT,
         )
     except requests.RequestException as e:
@@ -418,7 +466,7 @@ def _current_user_email():
         return None
     api_base = _resolve_api_base()
     try:
-        resp = requests.post(f"{api_base}/api/auth/verify", json={"token": token}, headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()}, timeout=PROXY_TIMEOUT)
+        resp = requests.post(f"{api_base}/api/auth/verify", json={"token": token}, headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base)}, timeout=PROXY_TIMEOUT)
     except requests.RequestException:
         return None
     if resp.status_code != 200:
@@ -451,7 +499,7 @@ def _enforce_ip_ban():
     try:
         resp = requests.get(
             f"{api_base}/api/ban/check",
-            headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": client_ip},
+            headers={**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base), "X-Forwarded-For": client_ip},
             timeout=PROXY_TIMEOUT,
         )
         banned = resp.status_code == 200 and resp.json().get("banned")
@@ -507,7 +555,7 @@ def _resolve_api_base():
 
 def _proxy(path, method="GET", **params):
     api_base = _resolve_api_base()
-    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base), "X-Forwarded-For": _client_ip()}
     try:
         resp = requests.request(method, f"{api_base}{path}", params=params, headers=headers, timeout=PROXY_TIMEOUT)
     except requests.RequestException as e:
@@ -553,7 +601,7 @@ def proxy_history():
     さえしていれば誰でもできる(削除のような破壊的操作は用意していない)。
     """
     api_base = _resolve_api_base()
-    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()}
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base)}
 
     if request.method == "GET":
         limit = request.args.get("limit", "100")
@@ -577,7 +625,7 @@ def _proxy_user_api(path, method="GET", json_body=None):
         return jsonify({"error": True, "message": "ログインが必要です"}), 401
 
     api_base = _resolve_api_base()
-    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Session-Token": token}
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base), "X-Session-Token": token}
     url = f"{api_base}{path}"
 
     if method == "GET":
@@ -755,7 +803,7 @@ def proxy_check_search_moderation():
     """検索実行前のNGワードチェック。ログイン不要で誰でも呼べる
     (バックエンド側のcheck_search_moderation_endpointもログイン不要な設計になっている)。"""
     api_base = _resolve_api_base()
-    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers()}
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base)}
     body = request.get_json(silent=True) or {}
     resp = requests.post(f"{api_base}/api/moderation/check-search", json=body, headers=headers, timeout=PROXY_TIMEOUT)
     try:
@@ -816,7 +864,7 @@ def proxy_subtitles(video_id):
     lang = request.args.get("lang", "ja")
     auto = request.args.get("auto", "0")
     api_base = _resolve_api_base()
-    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
+    headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base), "X-Forwarded-For": _client_ip()}
     try:
         resp = requests.get(
             f"{api_base}/api/subtitles/{video_id}",
@@ -875,7 +923,7 @@ def media_proxy(video_id):
     upstream_url = f"{api_base}/api/proxy-stream/{video_id}"
 
     range_header = request.headers.get("Range")
-    fwd_headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
+    fwd_headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base), "X-Forwarded-For": _client_ip()}
     if range_header:
         fwd_headers["Range"] = range_header
 
@@ -931,7 +979,7 @@ def media_muxed_proxy(video_id):
     api_base = _resolve_api_base()
     upstream_url = f"{api_base}/api/muxed-stream/{video_id}"
 
-    fwd_headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(), "X-Forwarded-For": _client_ip()}
+    fwd_headers = {**_BACKEND_REQUEST_HEADERS, **_backend_auth_headers(api_base), "X-Forwarded-For": _client_ip()}
 
     try:
         upstream = requests.get(
