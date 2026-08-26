@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}マイプレイリスト - {{ site_name }}{% endblock %}
+{% block page_id %}my_playlist_detail{% endblock %}
+{% block body_data %}data-playlist-id="{{ playlist_id }}"{% endblock %}
+{% block content %}
+<div class="pl-layout">
+  <div class="pl-sidebar">
+    <div class="pl-sidebar-thumb" id="myPlaylistHeroThumb"></div>
+    <div class="my-playlist-badge">マイプレイリスト</div>
+    <h1 class="pl-title" id="myPlaylistTitle">読み込み中…</h1>
+    <div class="pl-owner">{{ site_name }}</div>
+    <div class="pl-meta" id="myPlaylistMeta"></div>
+    <div class="pl-actions" style="gap:8px; flex-direction:column;">
+      <button type="button" class="pl-play-all-btn" id="myPlaylistPlayAllBtn">すべて再生</button>
+      <button type="button" class="page-settings-btn secondary" id="myPlaylistRenameBtn">名前を変更</button>
+      <button type="button" class="page-settings-btn danger" id="myPlaylistDeleteBtn">削除</button>
+    </div>
+  </div>
+  <div class="pl-video-list" id="myPlaylistVideoList"></div>
+</div>
+{% endblock %}

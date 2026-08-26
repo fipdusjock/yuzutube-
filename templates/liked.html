@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}高く評価した動画 - {{ site_name }}{% endblock %}
+{% block page_id %}liked{% endblock %}
+{% block content %}
+<div class="pl-layout">
+  <div class="pl-sidebar">
+    <div class="pl-sidebar-thumb" id="likedHeroThumb"></div>
+    <h1 class="pl-title">高く評価した動画</h1>
+    <div class="pl-owner">{{ site_name }}</div>
+    <div class="pl-meta" id="likedMeta">0 本の動画</div>
+    <div class="pl-actions">
+      <button type="button" class="pl-play-all-btn" id="likedPlayAllBtn">すべて再生</button>
+    </div>
+  </div>
+  <div class="pl-video-list" id="likedList">
+    <div class="empty-state">読み込み中…</div>
+  </div>
+</div>
+{% endblock %}
