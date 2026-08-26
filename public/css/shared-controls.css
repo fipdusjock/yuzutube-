@@ -1,0 +1,104 @@
+.page-settings-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  width: fit-content;
+  align-self: flex-start;
+}
+.page-settings-btn:hover { filter: brightness(1.08); }
+.page-settings-btn.secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.page-settings-btn.danger {
+  background: transparent;
+  color: #ff5c5c;
+  border: 1px solid rgba(255,92,92,0.4);
+}
+.page-settings-btn.danger:hover { background: rgba(255,92,92,0.1); }
+
+.subscribe-btn {
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  border-radius: 18px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.subscribe-btn.subscribed {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.like-btn { cursor: pointer; border: none; color: var(--text); }
+.like-btn.active { color: var(--accent); }
+.like-btn.active .icon svg { fill: var(--accent); }
+
+.sub-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.sub-row .avatar {
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.sub-row .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.sub-row .title { font-size: 14px; font-weight: 500; }
+
+/* 中央表示モーダルの共通見た目(プレイリスト保存モーダル等が利用) */
+.announcement-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.announcement-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+}
+.announcement-box {
+  position: relative;
+  background: var(--bg-elevated);
+  border-radius: 16px;
+  padding: 28px 24px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.announcement-title { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
+.announcement-close-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 28px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.announcement-close-btn:hover { filter: brightness(1.08); }
