@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-08-26",
+    "changes": [
+      "コードのリファクタリング by Yosshy",
+      "ログイン機能の廃止等 by Yosshy"
+    ]
+  },
+  {
     "date": "2026-08-25",
     "changes": [
       "トークン発行apiを叩いてやるように修正 by Yosshy",
